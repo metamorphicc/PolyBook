@@ -9,6 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@polymarket/clob-client": "^5.2.1",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.2.3",
+    "ethers": "^5.8.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3"
