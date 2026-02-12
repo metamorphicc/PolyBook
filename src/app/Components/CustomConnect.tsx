@@ -12,9 +12,11 @@ export default function CustomConnect() {
           onClick={() => {
             open({ view: "Connect" });
           }}
+          className="cursor-pointer"
         >
           коннект валлет
         </button>
+
       </div>
     </>
   );

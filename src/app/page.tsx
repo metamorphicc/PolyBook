@@ -26,12 +26,16 @@ export default function Home() {
         </p>
         <ul className="flex">
           <li className="w-30">
+            
             {!address && !isConnected ? (
-              <CustomConnect />
+              <>
+                <CustomConnect />
+              </>
             ) : (
               <>
                 <p className="break-words">Profile: {address}</p>{" "}
                 <CustomDisconnect />
+                {}
                 <SignMessage />
               </>
             )}
