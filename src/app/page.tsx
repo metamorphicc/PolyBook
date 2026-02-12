@@ -1,12 +1,15 @@
-"use client"
+"use client";
 
 import Image from "next/image";
 import ScalpOrderbook from "./Components/ScalpBook";
 import { AppKitButton } from "@reown/appkit/react";
 import { useAppKitAccount } from "@reown/appkit/react";
+import CustomConnect from "./Components/CustomConnect";
+import CustomDisconnect from "./Components/Disconnect";
+import SignMessage from "./Components/SignMessage";
 
 export default function Home() {
-  const {address, isConnected, status} = useAppKitAccount()
+  const { address, isConnected, status } = useAppKitAccount();
 
   return (
     <div className="flex h-screen flex-col px-5 py-3 box-border">
@@ -23,8 +26,15 @@ export default function Home() {
         </p>
         <ul className="flex">
           <li className="w-30">
-            
-            {!address && !isConnected ? <AppKitButton/> : <><p className="break-words">Profile: {address}</p> </>}
+            {!address && !isConnected ? (
+              <CustomConnect />
+            ) : (
+              <>
+                <p className="break-words">Profile: {address}</p>{" "}
+                <CustomDisconnect />
+                <SignMessage />
+              </>
+            )}
           </li>
         </ul>
       </div>

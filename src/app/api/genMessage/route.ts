@@ -4,7 +4,7 @@ import Router from "express";
 
 const app = Router();
 
-app.post("/auth/nonce", async (req, res) => {
+app.post("/", async (req, res) => {
   const { address } = req.body;
   const addr = address.toLowerCase();
 

@@ -6,11 +6,11 @@ import jwt from "jsonwebtoken"
 
 const app = express();
 
-app.post("/auth/verify", async (req, res) => {
-  const { address, message, signature } = req.body as {
+app.post("/", async (req, res) => {
+  const { address, message, sighed } = req.body as {
     address: string;
     message: string;
-    signature: string;
+    sighed: string;
   };
 
   const addr = address.toLowerCase();
@@ -31,7 +31,7 @@ app.post("/auth/verify", async (req, res) => {
   }
 
   const recovered = ethers.utils
-    .verifyMessage(message, signature)
+    .verifyMessage(message, sighed)
     .toLowerCase();
 
   if (recovered !== addr) {
@@ -50,3 +50,6 @@ app.post("/auth/verify", async (req, res) => {
 
   res.json({ token });
 });
+
+
+export const verifyApp = app

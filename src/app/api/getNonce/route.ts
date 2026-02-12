@@ -5,7 +5,7 @@ import { pool } from "../db";
 
 const nonceApp = express();
 
-nonceApp.get("/", async (req, res) => {
+nonceApp.post("/", async (req, res) => {
   const address = (req.query.address as string | undefined)?.toLowerCase();
   const nonce = crypto.randomBytes(16).toString("hex");
 
