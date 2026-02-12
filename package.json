@@ -6,19 +6,33 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "server": "nodemon --exec ts-node --project tsconfig.server.json ./server/main.ts"
   },
   "dependencies": {
     "@polymarket/clob-client": "^5.2.1",
+    "@reown/appkit": "^1.8.18",
+    "@reown/appkit-adapter-wagmi": "^1.8.18",
+    "@tanstack/react-query": "^5.90.21",
     "clsx": "^2.1.1",
+    "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "ethers": "^5.8.0",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.17.0",
     "next": "16.1.6",
+    "nodemon": "^3.1.11",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "siwe": "^3.0.0",
+    "viem": "^2.45.3",
+    "wagmi": "^3.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
