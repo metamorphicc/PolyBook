@@ -7,41 +7,14 @@ import { useAppKitAccount } from "@reown/appkit/react";
 import CustomConnect from "./Components/CustomConnect";
 import CustomDisconnect from "./Components/Disconnect";
 import SignMessage from "./Components/SignMessage";
+import Header from "./Components/header";
 
 export default function Home() {
   const { address, isConnected, status } = useAppKitAccount();
-
   return (
-    <div className="flex h-screen flex-col px-5 py-3 box-border">
-      <div className="px-4 py-2 border rounded-full mb-3 justify-between flex items-center">
-        <p className="flex gap-4 text-[25px]">
-          <Image
-            src="/logo.png"
-            alt="logo"
-            width={20}
-            height={20}
-            className="object-contain"
-          />
-          PolyBooks
-        </p>
-        <ul className="flex">
-          <li className="w-30">
-            
-            {!address && !isConnected ? (
-              <>
-                <CustomConnect />
-              </>
-            ) : (
-              <>
-                <p className="break-words">Profile: {address}</p>{" "}
-                <CustomDisconnect />
-                {}
-                <SignMessage />
-              </>
-            )}
-          </li>
-        </ul>
-      </div>
+    <div className="flex h-screen flex-col px-3 py-3 box-border">
+      <Header />
+
       <div className="flex-1 bg-zinc-900">
         {/* <div className="flex border border-zinc-700 p-4 rounded-md items-center justify-center">
 

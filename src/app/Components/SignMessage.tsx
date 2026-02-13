@@ -6,6 +6,7 @@ export default function SignMessage() {
   const { address, isConnected } = useAppKitAccount();
   const { signMessageAsync } = useSignMessage();
   const calledRef = useRef(false);
+  console.log("entry sign message")
 
   useEffect(() => {
     const token =

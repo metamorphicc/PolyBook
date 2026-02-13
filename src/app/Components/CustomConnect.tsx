@@ -7,12 +7,12 @@ export default function CustomConnect() {
   const { address, isConnected } = useAppKitAccount();
   return (
     <>
-      <div>
+      <div className="w-full">
         <button
           onClick={() => {
             open({ view: "Connect" });
           }}
-          className="cursor-pointer"
+          className="cursor-pointer bg-black px-2 w-full transition hover:bg-zinc-700 border rounded-full h-10"
         >
           коннект валлет
         </button>
