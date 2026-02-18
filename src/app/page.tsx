@@ -2,7 +2,8 @@
 
 import { useAppKitAccount } from "@reown/appkit/react";
 import Header from "./Components/header";
-
+import ScalpTerminal2 from "./Components/ScalpBook";
+import Markets from "./Components/Markets";
 export default function Home() {
 
   const { address, isConnected, status } = useAppKitAccount();
@@ -11,11 +12,12 @@ export default function Home() {
       <Header />
 
       <div className="flex-1 bg-zinc-900">
-        {/* <div className="flex border border-zinc-700 p-4 rounded-md items-center justify-center">
+        <div className="flex border border-zinc-700 p-4 rounded-md items-center justify-center">
 
    
-        </div> */}
-        {/* <ScalpOrderbook /> */}
+        </div>
+        <ScalpTerminal2 />
+        <Markets/>
       </div>
     </div>
   );
