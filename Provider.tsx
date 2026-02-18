@@ -6,7 +6,7 @@ import { wagmiAdapter } from './appkit'
 
 const queryClient = new QueryClient()
 
-export function AppKitProvider({ children }: { children: React.ReactNode }) {
+export function AppKitProviderr({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiAdapter.wagmiConfig}>
       <QueryClientProvider client={queryClient}>

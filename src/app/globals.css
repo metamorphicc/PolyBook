@@ -21,11 +21,13 @@
   }
 }
 
-svg[height=""],
-svg[width=""] {
-  display: none;
+svg[height=""] {
+  height: 1em; 
 }
 
+svg[width=""] {
+  width: 1em;
+}
 
 body {
   

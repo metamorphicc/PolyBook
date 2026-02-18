@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AppKitProvider } from "../../Provider";
-import "../../appkit"
+import { createConfig } from "wagmi";
+import { AppKitProviderr } from "../../Provider";
+import { http } from "viem";
+import { mainnet } from "viem/chains";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,6 +21,11 @@ export const metadata: Metadata = {
   description: "",
 };
 
+const config = createConfig({
+  chains: [mainnet],
+  transports: { [mainnet.id]: http() },
+});
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,7 +36,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AppKitProvider>{children}</AppKitProvider>
+        <AppKitProviderr>{children}</AppKitProviderr>
       </body>
     </html>
   );

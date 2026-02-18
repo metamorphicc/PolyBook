@@ -1,19 +1,15 @@
 import express from "express";
 import crypto from "crypto";
-import { ethers } from "ethers";
+import { verifyMessage } from "ethers";
 import { pool } from "../db";
 import jwt from "jsonwebtoken"
 
 const app = express();
 
 app.post("/", async (req, res) => {
+  app.use(express.json());
   try {
-    const { address, message, sighed } = req.body as {
-      address: string;
-      message: string;
-      sighed: string;
-    };
-
+    const { address, nonce } = req.body 
     const addr = address.toLowerCase();
     console.log("addr:", addr);
 
@@ -31,16 +27,8 @@ app.post("/", async (req, res) => {
     const expectedNonce = rows[0].nonce as string;
     console.log("expectedNonce:", expectedNonce);
 
-    if (!message.includes(expectedNonce)) {
-      return res.status(400).json({ error: "Nonce mismatch" });
-    }
-
-    const recovered = ethers.utils.verifyMessage(message, sighed).toLowerCase();
-    console.log("recovered:", recovered);
-
-    if (recovered !== addr) {
-      return res.status(401).json({ error: "Invalid signature" });
-    }
+    
+    const [rowReg] = await pool.query("INSERT INTO users (address) VALUES (?)", [address])
 
     await pool.query(
       "UPDATE login_nonces SET used = 1 WHERE address = ? AND nonce = ?",
@@ -53,7 +41,7 @@ app.post("/", async (req, res) => {
       { expiresIn: "7d" }
     );
     console.log(token)
-    return res.status(200).json({ ok: "ok", token });
+    return res.status(200).json({ ok: "ok", token: "token" });
   } catch (e) {
     console.error("verify error:", e);
     return res.status(500).json({ error: "Server error" });

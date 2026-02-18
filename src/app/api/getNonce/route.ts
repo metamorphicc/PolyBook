@@ -1,6 +1,5 @@
 import express from "express";
 import crypto from "crypto";
-import { ethers } from "ethers";
 import { pool } from "../db";
 
 const nonceApp = express();

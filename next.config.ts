@@ -1,13 +1,13 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  /* config options here */
-  reactCompiler: true,
-  // resolve: {
-  //   alias: {
-  //     '@phosphor-icons/webcomponents': false, 
-  //   },
-  // }
+const nextConfig = {
+  turbopack: (config: any) => {
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      "@phosphor-icons/webcomponents": false, 
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

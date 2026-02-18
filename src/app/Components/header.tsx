@@ -1,13 +1,9 @@
 "use client";
 import Image from "next/image";
-import { AppKit } from "@reown/appkit";
-import { useAppKitAccount } from "@reown/appkit/react";
 import CustomConnect from "./CustomConnect";
-import CustomDisconnect from "./Disconnect";
-import SignMessage from "./SignMessage";
 import { useRouter } from "next/navigation";
+
 export default function Header() {
-  const { address, isConnected, status } = useAppKitAccount();
   const router = useRouter();
   return (
     <>
@@ -44,30 +40,17 @@ export default function Header() {
               </button>
             </li>
             <li>
-              <button className="border rounded-md px-4 py-1.5 transition border-zinc-500 hover:bg-zinc-700 cursor-pointer">
+              <button
+                className="border rounded-md px-4 py-1.5 transition border-zinc-500 hover:bg-zinc-700 cursor-pointer"
+                onClick={() => router.push("/profile")}
+              >
                 Profile
               </button>
             </li>
           </ul>
           <ul className="flex">
             <li className="w-50">
-              {!address && !isConnected ? (
-                <>
-                  <CustomConnect />
-                </>
-              ) : (
-                <>
-                  <div onClick={() => router.push("/profile")} className="w-full cursor-pointer">
-                    <p className="break-words">
-                      Profile:{" "}
-                      {address?.slice(0, 5) + "..." + address?.slice(35)}
-                    </p>
-                  </div>
-
-                  <CustomDisconnect />
-                  <SignMessage />
-                </>
-              )}
+              <CustomConnect/>
             </li>
           </ul>
         </div>
