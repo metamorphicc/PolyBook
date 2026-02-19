@@ -1,12 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig = {
-  turbopack: (config: any) => {
-    config.resolve.alias = {
-      ...(config.resolve.alias ?? {}),
-      "@phosphor-icons/webcomponents": false, 
-    };
-    return config;
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**.amazonaws.com", 
+      },
+    ],
   },
 };
 

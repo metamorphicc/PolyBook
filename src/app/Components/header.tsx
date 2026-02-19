@@ -7,7 +7,7 @@ export default function Header() {
   const router = useRouter();
   return (
     <>
-      <div className="px-4 py-2 border rounded-full mb-3 justify-between flex items-center">
+      <div className="px-4 py-2 border rounded-full mb-3 justify-between flex items-center shadow-lg hover:shadow-xl sticky ">
         <div className="flex justify-between gap-4 w-full items-center px-4">
           <ul>
             <li>

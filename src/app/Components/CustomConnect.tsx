@@ -2,12 +2,13 @@ import { createAppKit, useAppKit, useDisconnect } from "@reown/appkit/react";
 import { useAppKitAccount } from "@reown/appkit/react";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 
 export default function CustomConnect() {
   const { address, isConnected, status } = useAppKitAccount();
   const { open, close } = useAppKit();
   const { disconnect } = useDisconnect();
-  const [ nonce, setNonce ] = useState<any>();
+  const [nonce, setNonce] = useState<any>();
   const [authDone, setAuthDone] = useState(false);
 
   useEffect(() => {
@@ -20,12 +21,11 @@ export default function CustomConnect() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address }),
       });
-      console.log(JSON.stringify(nonceRes))
-      setNonce(JSON.stringify(nonceRes))
-    }
+      console.log(JSON.stringify(nonceRes));
+      setNonce(JSON.stringify(nonceRes));
+    };
 
     const verify = async () => {
-
       const signRes = await fetch("http://localhost:8089/api/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -33,10 +33,10 @@ export default function CustomConnect() {
       });
 
       const data = await signRes.json();
-      setAuthDone(true)
+      setAuthDone(true);
       console.log("USER JUST REGISTERED <---------", data);
     };
-    getNonce()
+    getNonce();
     verify();
   }, [isConnected, address, status]);
   return (
@@ -52,12 +52,8 @@ export default function CustomConnect() {
         </div>
       ) : (
         <div className="w-full">
-          <p className="break-words">address: {address}</p>
-          <button
-            onClick={() => disconnect()}
-            className="cursor-pointer bg-black px-2 w-full transition hover:bg-zinc-700 border rounded-full h-10"
-          >
-            disconnect wallet
+          <button>
+            <Image src="/logo.png" alt="img" width={10}  height={10} />
           </button>
         </div>
       )}
