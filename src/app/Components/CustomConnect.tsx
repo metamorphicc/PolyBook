@@ -1,6 +1,6 @@
 import { createAppKit, useAppKit, useDisconnect } from "@reown/appkit/react";
 import { useAppKitAccount } from "@reown/appkit/react";
-
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
@@ -10,6 +10,7 @@ export default function CustomConnect() {
   const { disconnect } = useDisconnect();
   const [nonce, setNonce] = useState<any>();
   const [authDone, setAuthDone] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (isConnected || address || authDone) return;
@@ -51,10 +52,16 @@ export default function CustomConnect() {
           </button>
         </div>
       ) : (
-        <div className="w-full">
-          <button>
-            <Image src="/logo.png" alt="img" width={10}  height={10} />
-          </button>
+        <div className="w-full flex items-center gap-9">
+          <div className="">
+            <span className="flex ">Balance: <p className="ml-1">$0.00</p></span>
+          </div>
+          <button
+                className="border rounded-md px-4 w-[70px] py-1.5 bg-sky-300/70 w-full transition border-sky-300/50 hover:bg-sky-300 cursor-pointer"
+                onClick={() => router.push("/profile")}
+              >
+                Profile
+              </button>
         </div>
       )}
     </>
