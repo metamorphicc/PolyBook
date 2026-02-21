@@ -7,9 +7,32 @@ import Markets from "./Components/Markets";
 import Image from "next/image";
 import Loading from "./Components/Loading";
 import { useEffect, useState, useMemo } from "react";
+import { useAccount, useWalletClient } from "wagmi";
+import { ethers } from "ethers";
 
+export function useEthersSigner() {
+  const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+
+  return useMemo(() => {
+    if (!isConnected || !walletClient) return null;
+
+    const provider = new ethers.BrowserProvider(walletClient as any);
+    return provider.getSigner(address);
+  }, [address, isConnected, walletClient]);
+}
 
 export default function Home() {
+  const signerPromise = useEthersSigner();
+  useEffect(() => {
+    const run = async () => {
+      if (!signerPromise) return;
+      const signer = await signerPromise;
+      if (!signer) return;
+    };
+    run();
+  }, [signerPromise]);
+
   const { address, isConnected, status } = useAppKitAccount();
   const [ress, setRess] = useState<any>([]);
   const [loading, setLoading] = useState(true);
@@ -49,7 +72,7 @@ export default function Home() {
   return (
     <div className="flex h-screen flex-col px-3 py-3 box-border gap-3 relative items-center">
       <Header />
-      <div className="flex flex-col justify-center items-center">
+      <div className="flex flex-col w-full justify-center items-center">
         <div className="relative group max-w-xl w-full">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
             <svg
@@ -69,7 +92,7 @@ export default function Home() {
 
           <input
             type="text"
-            value={search}
+            value={search ?? ""}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search..."
             className="w-full border border-sky-300/50 rounded-2xl py-4 pl-12 pr-12 placeholder:text-gray-600"
@@ -99,7 +122,7 @@ export default function Home() {
       </div>
       <div className="flex-1 w-full flex justify-center">
         {/* ----- MARKETS PAGE -----*/}
-        <div className="w-[90vw] p-4   rounded-md shadow-lg bg-[#121212]">
+        <div className="w-[90vw] p-4   rounded-md shadow-lg">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
             {filteredMarkets.map((market: any) => {
               const data = new Date(market.endDate);
@@ -159,12 +182,10 @@ export default function Home() {
                         </div>
                       ))}
                     </div>
-                    
                   </div>
                   <div className="flex gap-1">
                     End: <div>{data.toLocaleDateString()}</div>
-
-                    </div>
+                  </div>
                 </div>
               );
             })}

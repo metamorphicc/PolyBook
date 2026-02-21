@@ -10,6 +10,7 @@
     "server": "nodemon --exec ts-node --project tsconfig.server.json ./server/main.ts"
   },
   "dependencies": {
+    "@polymarket/builder-relayer-client": "^0.0.8",
     "@polymarket/clob-client": "^1.0.1",
     "@privy-io/node": "^0.9.0",
     "@privy-io/react-auth": "^3.13.1",
