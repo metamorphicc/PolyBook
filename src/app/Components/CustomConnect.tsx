@@ -3,16 +3,22 @@ import { useAppKitAccount } from "@reown/appkit/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { useAppKitSIWX } from "@reown/appkit-siwx/react";
+import type { ReownAuthentication } from "@reown/appkit-siwx";
+import Loading from "./Loading";
 
 export default function CustomConnect() {
+  
   const { address, isConnected, status } = useAppKitAccount();
   const { open, close } = useAppKit();
   const { disconnect } = useDisconnect();
   const [nonce, setNonce] = useState<any>();
   const [authDone, setAuthDone] = useState(false);
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    setLoading(true)
     if (!isConnected || !address || authDone) return;
     const getNonce = async () => {
       console.log("status: ", status);
@@ -39,6 +45,7 @@ export default function CustomConnect() {
     };
     getNonce();
     verify();
+    setLoading(false)
   }, [isConnected, address, status]);
   return (
     <>
