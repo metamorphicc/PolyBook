@@ -2,26 +2,32 @@ import express from "express";
 import { pool } from "../db";
 
 const appUsers = express();
-
+appUsers.use(express.json());
 appUsers.post("/", async (req, res) => {
-  const { address } = req.body;
+  const { address, safe_address } = req.body;
+
 
   const [rowCheck]: any = await pool.query(
-    "SELECT address FROM users WHERE address = ?",
-    [address] as any
+    "SELECT safe_address FROM users WHERE safe_address = ?",
+    [safe_address] as any
   );
-
   if (rowCheck.length) {
-    console.log(rowCheck);
     return res.status(200).json({ ok: "ok", status: "registered" });
   }
 
   const [row] = await pool.query(
-    "INSERT INTO users(name, address) VALUES(?, ?)",
-    [address, address] as any
+    "INSERT INTO users(name, address, balance, safe_address) VALUES(?, ?, ?, ?)",
+    ["namesdf", address, 0, safe_address] as any
   );
 
-  res.status(200).json({ ok: "ok", status: "not registered", address: address });
+  res
+    .status(200)
+    .json({
+      ok: "ok",
+      status: "not registered",
+      address: address,
+      safe_address: safe_address,
+    });
 });
 
 export default appUsers;

@@ -1,23 +1,39 @@
-import { ethers } from 'ethers';
-import Safe from '@safe-global/protocol-kit'; 
+import { NextResponse } from 'next/server';
+import Safe from '@safe-global/protocol-kit';
 
-const RPC_URL = "https://polygon-rpc.com";
+const RPC_URL = "https://polygon-mainnet.g.alchemy.com/v2/F6AAfcAUEeGEEAU6PWdwwIeb4sz1cMai";
 
-async function getPredictedSafeAddress(userOwnerAddress: string) {
-    const safeSdk = await Safe.init({
-        provider: RPC_URL,
-        signer: userOwnerAddress, 
-        predictedSafe: {
-            safeAccountConfig: {
-                owners: [userOwnerAddress],
-                threshold: 1
-            }
+export async function POST(request: Request) {
+    try {
+
+        const body = await request.json();
+        const { ownerAddress } = body; 
+
+        if (!ownerAddress) {
+            return NextResponse.json({ error: "ownerAddress is required" }, { status: 400 });
         }
-    });
 
+        const safeSdk = await Safe.init({
+            provider: RPC_URL,
+            signer: ownerAddress, 
+            predictedSafe: {
+                safeAccountConfig: {
+                    owners: [ownerAddress],
+                    threshold: 1
+                }
+            }
+        });
 
-    const predictedAddress = await safeSdk.getAddress();
-    
-    console.log("Safe Address:", predictedAddress);
-    return predictedAddress;
+        const predictedAddress = await safeSdk.getAddress();
+        await fetch("http://localhost:8089/api/registerUser",  {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ address: ownerAddress, safe_address: predictedAddress }), 
+          }).then((res) => {res.json() });
+        return NextResponse.json({ proxyAddress: predictedAddress });
+
+    } catch (error: any) {
+        console.error("back error", error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }

@@ -2,13 +2,28 @@ import { createAppKit, useAppKit, useDisconnect } from "@reown/appkit/react";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import Image from "next/image";
-import { useAppKitSIWX } from "@reown/appkit-siwx/react";
-import type { ReownAuthentication } from "@reown/appkit-siwx";
-import Loading from "./Loading";
+import { useMemo } from "react";
+import { useAccount, useConnectorClient } from 'wagmi';
+import { BrowserProvider, JsonRpcSigner } from 'ethers';
+import { initPolymarketClient } from "./verifyUser";
+
+function useEthersSigner() {
+  const { data: client } = useConnectorClient()
+  return useMemo(() => {
+    if (!client) return undefined;
+    const { account, chain, transport } = client;
+    const network = {
+      chainId: chain.id,
+      name: chain.name,
+      ensAddress: chain.contracts?.ensRegistry?.address,
+    };
+    const provider = new BrowserProvider(transport, network);
+    return new JsonRpcSigner(provider, account.address);
+  }, [client]);
+}
 
 export default function CustomConnect() {
-  
+  const signer = useEthersSigner();
   const { address, isConnected, status } = useAppKitAccount();
   const { open, close } = useAppKit();
   const { disconnect } = useDisconnect();
@@ -16,10 +31,47 @@ export default function CustomConnect() {
   const [authDone, setAuthDone] = useState(false);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-
+  const [safe, setSafe] = useState<any>();
+  const [client, setClient] = useState<any>();
   useEffect(() => {
     setLoading(true)
+
     if (!isConnected || !address || authDone) return;
+    const initAccount = async () => {
+
+      if (!isConnected || !address || !signer || authDone) return;
+  
+      setLoading(true);
+      try {
+   
+        const safeRes = await fetch("/api/user/safe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ownerAddress: address }), 
+        });
+        
+        const { proxyAddress } = await safeRes.json();
+        setSafe(proxyAddress);
+        console.log("safe address:", proxyAddress);
+  
+
+        const tradingClient = await initPolymarketClient(signer, proxyAddress);
+        
+        setClient(tradingClient); 
+        setAuthDone(true);
+        
+      } catch {
+      }
+    }
+  
+    const getSafeWallet = async () => {
+      const safeRow = await fetch("/api/user/safe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ownerAddress: address }),
+      });
+      setSafe(JSON.stringify(safeRow));
+    }
     const getNonce = async () => {
       console.log("status: ", status);
 
@@ -28,7 +80,6 @@ export default function CustomConnect() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address }),
       });
-      console.log(JSON.stringify(nonceRes));
       setNonce(JSON.stringify(nonceRes));
     };
 
@@ -41,8 +92,8 @@ export default function CustomConnect() {
 
       const data = await signRes.json();
       setAuthDone(true);
-      console.log("USER JUST REGISTERED <---------", data);
     };
+    initAccount();
     getNonce();
     verify();
     setLoading(false)

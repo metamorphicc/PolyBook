@@ -1,6 +1,4 @@
 import express from "express";
-import crypto from "crypto";
-import { verifyMessage } from "ethers";
 import { pool } from "../db";
 import jwt from "jsonwebtoken"
 
@@ -27,8 +25,6 @@ app.post("/", async (req, res) => {
     const expectedNonce = rows[0].nonce as string;
     console.log("expectedNonce:", expectedNonce);
 
-    
-    const [rowReg] = await pool.query("INSERT INTO users (address) VALUES (?)", [address])
 
     await pool.query(
       "UPDATE login_nonces SET used = 1 WHERE address = ? AND nonce = ?",
