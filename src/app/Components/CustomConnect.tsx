@@ -121,6 +121,7 @@ export default function CustomConnect() {
               <span>In-trade: $0.00</span>
             </div>
           </div>
+          <button onClick={() => {router.push("/scalp")} } className="border rounded-md px-4 w-[110px] py-1.5 bg-sky-300/70 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer md:text-[13px] md:w-[90px] mr-9">Scalping</button>
 
           <button
             className="border rounded-md px-4 w-[110px] py-1.5 bg-sky-300/70 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer md:text-[13px] md:w-[90px]"

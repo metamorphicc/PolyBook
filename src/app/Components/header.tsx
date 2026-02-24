@@ -12,7 +12,7 @@ export default function Header() {
         <div className="flex-1 flex items-center">
           <button
             className="flex gap-3 text-[25px] cursor-pointer items-center"
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/home")}
           >
             <Image
               src="/logo.png"

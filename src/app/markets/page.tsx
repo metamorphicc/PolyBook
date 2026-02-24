@@ -5,9 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import Loading from "../Components/Loading";
 import { useRouter } from "next/navigation";
 
-export default function Markets() {
+export default function Markets({ searchQuery }: { searchQuery: string }) {
   const router = useRouter()
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const [search, setSearch] = useState<any>();
 
@@ -16,33 +16,29 @@ export default function Markets() {
     const parse = async () => {
       try {
         setLoading(true);
-
         const row = await fetch("/api/markets").then((res) => res.json());
-
         setRess(row);
-        console.log(row);
       } catch (e) {
-        console.log("pizda bochok potic: " + e);
+        console.log("Error: " + e);
       } finally {
         setLoading(false);
       }
     };
-
     parse();
   }, []);
-  const filteredMarkets = useMemo(() => {
-    if (!search) return ress;
 
-    const query = search.toLowerCase();
+  const filteredMarkets = useMemo(() => {
+    if (!searchQuery) return ress;
+
+    const query = searchQuery.toLowerCase();
 
     return ress.filter((market: any) => {
       const titleMatch = market.title?.toLowerCase().includes(query);
-
       const tagMatch = market.tags?.[0]?.label?.toLowerCase().includes(query);
-
       return titleMatch || tagMatch;
     });
-  }, [search, ress]);
+  }, [searchQuery, ress]); 
+
   if (loading) return <Loading />;
 
   return (

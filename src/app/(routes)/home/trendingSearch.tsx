@@ -43,7 +43,7 @@ export default function TrendingSearch() {
   if (loading) return <Loading />;
   return (
     <>
-      <div className="flex flex-col h-full w-full"> {/* Родительский контейнер на всю высоту */}
+      <div className="flex flex-col h-full w-full"> 
   {filteredMarkets.map((market:any) => (
     <div
       key={market.id}

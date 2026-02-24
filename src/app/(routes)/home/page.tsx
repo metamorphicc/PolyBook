@@ -34,7 +34,6 @@ export default function Home() {
   }, [signerPromise]);
 
   const { address, isConnected, status } = useAppKitAccount();
-
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState<any>();
 
@@ -43,7 +42,6 @@ export default function Home() {
       <Header />
       <div className="w-[90vw] min-h-88  flex items-center flex-shrink-0 gap-5">
         <div className=" h-full w-full shadow-lg">
-          {" "}
           <TrendingSearch />
         </div>
         <div className=" h-full w-full  flex flex-col justify-between">
@@ -101,7 +99,7 @@ export default function Home() {
       </div>
       <div className="flex-1 w-full flex justify-center">
         {/* ----- MARKETS PAGE -----*/}
-        <Markets />
+        <Markets searchQuery={search} />
 
         {/* <ScalpTerminal2 /> */}
         {/* <Markets/> */}
