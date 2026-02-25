@@ -2,7 +2,7 @@
 
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { wagmiAdapter } from './appkit.ts'
+import { wagmiAdapter } from './src/app/appkit.ts'
 
 const queryClient = new QueryClient()
 
