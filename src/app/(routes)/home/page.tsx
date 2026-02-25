@@ -10,6 +10,8 @@ import { useEffect, useState, useMemo } from "react";
 import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
 import TrendingSearch from "./trendingSearch";
+
+
 export function useEthersSigner() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
@@ -100,7 +102,7 @@ export default function Home() {
       <div className="flex-1 w-full flex justify-center">
         {/* ----- MARKETS PAGE -----*/}
         <Markets searchQuery={search} />
-
+          
         {/* <ScalpTerminal2 /> */}
         {/* <Markets/> */}
       </div>
