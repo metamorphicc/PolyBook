@@ -1,30 +1,22 @@
-import express from "express";
+import { NextResponse } from "next/server";
 import { pool } from "../db";
-import jwt from "jsonwebtoken"
+import jwt from "jsonwebtoken";
 
-const app = express();
-
-app.post("/", async (req, res) => {
-  app.use(express.json());
+export async function POST(req: Request) {
   try {
-    const { address, nonce } = req.body 
+    const { address, nonce } = await req.json();
     const addr = address.toLowerCase();
-    console.log("addr:", addr);
 
-    const [rows] = (await pool.query(
+    const [rows]: any = await pool.query(
       "SELECT nonce FROM login_nonces WHERE address = ? AND used = 0 ORDER BY id DESC LIMIT 1",
       [addr]
-    )) as any[];
-
-    console.log("rows:", rows);
+    );
 
     if (!rows.length) {
-      return res.status(400).json({ error: "No nonce for this address" });
+      return NextResponse.json({ error: "No nonce for this address" }, { status: 400 });
     }
 
-    const expectedNonce = rows[0].nonce as string;
-    console.log("expectedNonce:", expectedNonce);
-
+    const expectedNonce = rows[0].nonce;
 
     await pool.query(
       "UPDATE login_nonces SET used = 1 WHERE address = ? AND nonce = ?",
@@ -36,13 +28,10 @@ app.post("/", async (req, res) => {
       process.env.JWT_SECRET!,
       { expiresIn: "7d" }
     );
-    console.log(token)
-    return res.status(200).json({ ok: "ok", token: "token" });
+
+    return NextResponse.json({ ok: "ok", token: token });
   } catch (e) {
     console.error("verify error:", e);
-    return res.status(500).json({ error: "Server error" });
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
-});
-
-
-export const verifyApp = app
+}
