@@ -76,10 +76,12 @@ export default function Main() {
           <div className="shadow-lg rounded-[40px] flex min-w-[60%] max-w-[70%] text-[21px] p-5 flex flex-col gap-4">
             <div className="flex flex-col">
               <p>
-
+                polybook - bla bla bla bla Lorem ipsum dolor sit, amet
+                consectetur adipisicing elit. Suscipit, saepe!
               </p>
               <span className="text-[14px] text-zinc-500 font-medium">
-
+                Lorem, ipsum dolor sit amet consectetur adipisicing elit. At quo
+                distinctio soluta mollitia, quibusdam non?
               </span>
             </div>
 
@@ -108,10 +110,12 @@ export default function Main() {
           <div className="shadow-lg rounded-[40px] flex min-w-[60%] max-w-[70%] text-[21px] p-5 flex flex-col gap-4">
             <div className="flex flex-col">
               <p>
-
+                bla bla bla Lorem, ipsum dolor sit amet consectetur adipisicing
+                elit. At quo distinctio soluta mollitia, quibusdam non?
               </p>
               <span className="text-[14px] text-zinc-500 font-medium">
-
+                Lorem, ipsum dolor sit amet consectetur adipisicing elit. At quo
+                distinctio soluta mollitia, quibusdam non?
               </span>
             </div>
 
@@ -140,10 +144,14 @@ export default function Main() {
           <div className="shadow-lg rounded-[40px] flex min-w-[60%] max-w-[70%] text-[21px] p-5 flex flex-col gap-4">
             <div className="flex flex-col">
               <p>
-
+                Lorem, ipsum dolor sit amet consectetur adipisicing elit. At quo
+                distinctio soluta mollitia, quibusdam non?
               </p>
               <span className="text-[14px] text-zinc-500 font-medium">
-
+                Lorem, ipsum dolor sit amet consectetur adipisicing elit. At quo
+                distinctio soluta mollitia, quibusdam non? Lorem, ipsum dolor
+                sit amet consectetur adipisicing elit. At quo distinctio soluta
+                mollitia, quibusdam non?
               </span>
             </div>
 
@@ -172,8 +180,8 @@ export default function Main() {
       <div className="h-screen bg-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="flex flex-col items-center">
-            <p></p>
-            <span></span>
+            <p>This is the end</p>
+            <span>Start trading</span>
           </div>
 
           <button className="px-6 py-3 shadow-lg flex items-center rounded-lg cursor-pointer border">
@@ -186,9 +194,7 @@ export default function Main() {
           <div className="text-zinc-400">
             @ 2025 All rights privacy, DYOR NFA.
           </div>
-          <div className="text-zinc-400 text-[16px]">
-            Made for polymarket.
-          </div>
+          <div className="text-zinc-400 text-[16px]">Made for polymarket.</div>
         </footer>
       </div>
     </div>
