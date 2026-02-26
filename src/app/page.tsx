@@ -48,17 +48,17 @@ export default function Main() {
               </li>
               <li className="text-white font-semibold text-[19px]">
                 <button className="cursor-pointer hover:text-slate-400 transition duration-100">
-                  Docs
+                  Team
                 </button>
               </li>
               <li className="text-white font-semibold text-[19px]">
                 <button className="cursor-pointer hover:text-slate-400 transition duration-100">
-                  Docs
+                  About
                 </button>
               </li>
               <li className="text-white font-semibold text-[19px]">
                 <button className="cursor-pointer hover:text-slate-400 transition duration-100">
-                  Docs
+                  Support
                 </button>
               </li>
             </ul>
