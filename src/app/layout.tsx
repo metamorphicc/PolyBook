@@ -5,7 +5,7 @@ import { createConfig } from "wagmi";
 import { AppKitProviderr } from "../../Provider";
 import { http } from "viem";
 import { mainnet } from "viem/chains";
-
+import { ModalProvider } from "./Components/Modal";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PolyBooks",
+  title: "PolyBook",
   description: "",
 };
 
@@ -36,7 +36,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <ModalProvider>
+        <div id="modal-root" />
+
         <AppKitProviderr>{children}</AppKitProviderr>
+        </ModalProvider>
       </body>
     </html>
   );

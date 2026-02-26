@@ -11,6 +11,7 @@ export async function POST(req: Request) {
     );
 
     if (rowCheck.length) {
+      console.log("entered rowcheck")
       return NextResponse.json({ ok: "ok", status: "registered" });
     }
 

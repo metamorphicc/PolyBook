@@ -46,7 +46,7 @@ export default function Main() {
         </header>
 
         <div className="flex-1 w-full flex flex-col items-center justify-center gap-8 ">
-          <div className="">
+          <div className="p-5 backdrop-blur-xs py-17 border w-full">
             <div className="flex flex-col items-center justify-center gap-3 ">
               <p className="text-white font-semibold text-[30px]">PolyBook</p>
               <p className="text-white mb-3">

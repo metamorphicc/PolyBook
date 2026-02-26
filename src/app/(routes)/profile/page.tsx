@@ -8,7 +8,7 @@ export default function Profile() {
   const { address, isConnected, status } = useAppKitAccount();
   const [balance, setBalance] = useState<any>(null);
   const router = useRouter();
-  useEffect(() => {});
+  
   return (
     <>
       <div className="flex flex-col items-center h-screen py-5 gap-15 overflow-hidden">
@@ -28,14 +28,15 @@ export default function Profile() {
                   <div>
                     <p className="font-bold text-[19px]">Morph</p>
                     <span className="font-stretch-expanded">
-                      Тупой даун, без будущего, возможно умрет бомжом
+                      description blab bbla bla
                     </span>
                   </div>
+                  <button>send</button>
                 </div>
               </div>
               <div className="h-[90%]">
                 <div className="bg-white rounded-[30px] h-[70%] flex items-center justify-center px-5 shadow-lg">
-                  история сделок
+                  trades history
                 </div>
               </div>
             </div>
