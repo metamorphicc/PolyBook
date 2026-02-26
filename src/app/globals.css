@@ -7,6 +7,19 @@
   --foreground: #000000;
 }
 
+@keyframes arrow-bounce {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+
+.arrow-bounce {
+  animation: arrow-bounce 0.9s ease-in-out infinite;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
