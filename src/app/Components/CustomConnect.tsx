@@ -37,11 +37,15 @@ export default function CustomConnect() {
   const [client, setClient] = useState<any>();
   const [safeAddress, setSafeAddress] = useState();
   const { data: balance } = useBalance({
-    address: safe,
+    address: safeAddress,
+    query: {
+      enabled: !!safeAddress,
+    },
   });
-  const formattedBalance = balance
-    ? formatUnits(balance?.value, balance?.decimals)
-    : "0";
+  const formattedBalance =
+    balance && balance.value
+      ? formatUnits(balance.value, balance.decimals)
+      : "0.00";
   useEffect(() => {
     setLoading(true);
 
@@ -58,7 +62,7 @@ export default function CustomConnect() {
         const { proxyAddress } = await safeRes.json();
         setSafe(proxyAddress[0].safe_address);
         console.log("safe address:", proxyAddress[0].safe_address);
-
+        console.log("balance: ", formattedBalance);
         const tradingClient = await initPolymarketClient(signer, proxyAddress);
         setClient(tradingClient);
 

@@ -2,11 +2,11 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import Loading from "../Components/Loading";
+import Loading from "../../Components/Loading";
 import { useRouter } from "next/navigation";
 
 export default function Markets({ searchQuery }: { searchQuery: string }) {
-  const router = useRouter()
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const [search, setSearch] = useState<any>();
@@ -37,7 +37,7 @@ export default function Markets({ searchQuery }: { searchQuery: string }) {
       const tagMatch = market.tags?.[0]?.label?.toLowerCase().includes(query);
       return titleMatch || tagMatch;
     });
-  }, [searchQuery, ress]); 
+  }, [searchQuery, ress]);
 
   if (loading) return <Loading />;
 

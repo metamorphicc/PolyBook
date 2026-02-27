@@ -1,14 +1,17 @@
 "use client";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { redirect, useRouter } from "next/navigation";
 import { useRef } from "react";
-
+// import { Redirect } from "next";
+import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
 export default function Main() {
   const targetRef = useRef<HTMLDivElement | null>(null);
   const handleScroll = () => {
     targetRef.current?.scrollIntoView({ behavior: "smooth" });
   };
   const router = useRouter();
+  const {address, isConnected, status} = useAppKitAccount();
+  if (address || isConnected) redirect("/home") 
   return (
     <div className=" relative w-full ">
       <div className="h-screen flex flex-col items-center ">

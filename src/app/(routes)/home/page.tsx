@@ -3,14 +3,13 @@
 import { useAppKitAccount } from "@reown/appkit/react";
 import Header from "../../Components/header";
 import ScalpTerminal2 from "../../Components/ScalpBook";
-import Markets from "../../markets/page";
+import Markets from "../markets/page";
 import Image from "next/image";
 import Loading from "../../Components/Loading";
 import { useEffect, useState, useMemo } from "react";
 import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
 import TrendingSearch from "./trendingSearch";
-
 
 export function useEthersSigner() {
   const { address, isConnected } = useAccount();
@@ -102,7 +101,7 @@ export default function Home() {
       <div className="flex-1 w-full flex justify-center">
         {/* ----- MARKETS PAGE -----*/}
         <Markets searchQuery={search} />
-          
+
         {/* <ScalpTerminal2 /> */}
         {/* <Markets/> */}
       </div>
