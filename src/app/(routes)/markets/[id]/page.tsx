@@ -7,17 +7,17 @@ type RawPoint = { t: number; p: number };
 type ApiResponse = { history: RawPoint[] };
 
 type ChartPoint = { timestamp: number; probability: number };
-const id =
-  "92909595831677784305960426832337551335132297174712723670055008600724483830120";
+const id = "";
 
 export default async function marketsId({ params }: Props) {
   const param = await params;
   const marketId = param.id;
-  console.log(typeof GAMMA_HOST);
   const rows = await fetch(`${GAMMA_HOST}/events/${marketId}`);
   const jsonRows = await rows.json();
-  console.log(jsonRows);
-
+  const graphRow = await fetch(
+    `http://localhost:3002/api/graphics?id=92909595831677784305960426832337551335132297174712723670055008600724483830120`
+  );
+  const json = await graphRow.text();
   return (
     <div className="relative w-full ">
       <div className="h-screen flex flex-col w-full p-3 items-center justify-center">
