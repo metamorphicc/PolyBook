@@ -1,26 +1,53 @@
 import Header from "@/app/Components/header";
+import { GAMMA_HOST } from "../../../../app/share/main";
+
 type Props = { params: { id: string } };
+type RawPoint = { t: number; p: number };
+
+type ApiResponse = { history: RawPoint[] };
+
+type ChartPoint = { timestamp: number; probability: number };
+const id =
+  "92909595831677784305960426832337551335132297174712723670055008600724483830120";
 
 export default async function marketsId({ params }: Props) {
-  const { id } = await params;
+  const param = await params;
+  const marketId = param.id;
+  console.log(typeof GAMMA_HOST);
+  const rows = await fetch(`${GAMMA_HOST}/events/${marketId}`);
+  const jsonRows = await rows.json();
+  console.log(jsonRows);
 
-  const res = await fetch(`https://gamma-api.polymarket.com/events/${id}`);
-  const jsonRow = await res.json();
-  console.log(jsonRow);
   return (
     <div className="relative w-full ">
       <div className="h-screen flex flex-col w-full p-3 items-center justify-center">
-      <Header/>
+        <Header />
 
         <div className="flex h-full items-center justify-center w-full">
-
           <div className="border w-[80vw] h-[40vw] flex shadow-lg">
             <div className="w-full h-full items-center  flex flex-col">
               <div className="flex items-center h-[70%] justify-center w-full border">
-                charts
+                {/* <GetEvent id="92909595831677784305960426832337551335132297174712723670055008600724483830120" /> */}
               </div>
-              <div className="flex items-center h-[30%] justify-center w-full border">
-                markets
+              <div className="flex flex-col w-full max-h-80 border  overflow-y-auto ">
+                {jsonRows.markets.map((m: any) => (
+                  <div
+                    key={m.id}
+                    className="border p-3 w-full flex justify-between cursor-pointer hover:shadow-lg"
+                  >
+                    <div>
+                      <p className="hover:scale-103 transition">{m.question}</p>
+                    </div>
+                    <div className="flex gap-5 text-white">
+                      <button className="bg-green-500 h-7 cursor-pointer hover:bg-green-400 px-3 rounded-[10px] py-0.5 ">
+                        YES
+                      </button>
+                      <button className="bg-red-500 cursor-pointer h-7 hover:bg-red-400 px-3 rounded-[10px] py-0.5">
+                        NO
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="w-full flex flex-col  h-full p-15 justify-between">
