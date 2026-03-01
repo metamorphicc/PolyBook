@@ -1,5 +1,8 @@
 import Header from "@/app/Components/header";
 import { GAMMA_HOST } from "../../../../app/share/main";
+import { parse } from "path/posix";
+import { parseToChartData } from "../../../../app/Components/parseData";
+import PriceChart from "./PriceChart";
 
 type Props = { params: { id: string } };
 type RawPoint = { t: number; p: number };
@@ -17,7 +20,11 @@ export default async function marketsId({ params }: Props) {
   const graphRow = await fetch(
     `http://localhost:3002/api/graphics?id=92909595831677784305960426832337551335132297174712723670055008600724483830120`
   );
-  const json = await graphRow.text();
+  const json = await graphRow.json();
+  console.log(json)
+  
+  const chartData: ChartPoint[] = parseToChartData(json);
+  console.log(chartData)
   return (
     <div className="relative w-full ">
       <div className="h-screen flex flex-col w-full p-3 items-center justify-center">
@@ -27,7 +34,7 @@ export default async function marketsId({ params }: Props) {
           <div className="border w-[80vw] h-[40vw] flex shadow-lg">
             <div className="w-full h-full items-center  flex flex-col">
               <div className="flex items-center h-[70%] justify-center w-full border">
-                {/* <GetEvent id="92909595831677784305960426832337551335132297174712723670055008600724483830120" /> */}
+              <PriceChart data={chartData}/>
               </div>
               <div className="flex flex-col w-full max-h-80 border  overflow-y-auto ">
                 {jsonRows.markets.map((m: any) => (
@@ -63,4 +70,6 @@ export default async function marketsId({ params }: Props) {
       </div>
     </div>
   );
+  
 }
+
