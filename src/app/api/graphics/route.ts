@@ -11,7 +11,9 @@ export async function GET(req: Request) {
 
   const row = await fetch(
     `${CLOB_URL}/prices-history?market=${id}&interval=1h`,
-    { cache: "no-store" }
+    {
+      next: { revalidate: 60 },
+    }
   );
 
   if (!row.ok) {

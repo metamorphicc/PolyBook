@@ -17,14 +17,55 @@ export default async function marketsId({ params }: Props) {
   const marketId = param.id;
   const rows = await fetch(`${GAMMA_HOST}/events/${marketId}`);
   const jsonRows = await rows.json();
+  const markets = jsonRows.markets;
+
+  const targetMarkets = markets.slice(0, 3);
+
+  const colors = ["#22c55e", "#3b82f6", "#ef4444"];
+  const series = await Promise.all(
+    targetMarkets.map(async (m: any, idx: any) => {
+      const [yesTokenId] = JSON.parse(m.clobTokenIds) as string[];
+
+      const historyRes = await fetch(
+        `http://localhost:3002/api/graphics?id=${yesTokenId}`,
+        { cache: "no-store" }
+      );
+      const json = await historyRes.json();
+      const points = parseToChartData(json); 
+
+      return {
+        marketId: m.id,
+        label: m.groupItemTitle ?? m.question, 
+        color: colors[idx % colors.length],
+        points,
+      };
+    })
+  );
+
+  const market = jsonRows.markets[0];
+  const market2 = jsonRows.markets[1];
+  const market3 = jsonRows.markets[2];
+
+  const tokenId = JSON.parse(market.clobTokenIds);
+  const tokenId2 = JSON.parse(market2.clobTokenIds);
+  const tokenId3 = JSON.parse(market3.clobTokenIds);
+
   const graphRow = await fetch(
-    `http://localhost:3002/api/graphics?id=92909595831677784305960426832337551335132297174712723670055008600724483830120`
+    `http://localhost:3002/api/graphics?id=${tokenId[0]}`
   );
   const json = await graphRow.json();
-  console.log(json)
-  
+  const graphRow2 = await fetch(
+    `http://localhost:3002/api/graphics?id=${tokenId2[0]}`
+  );
+  const json2 = await graphRow2.json();
+  const graphRow3 = await fetch(
+    `http://localhost:3002/api/graphics?id=${tokenId3[0]}`
+  );
+  const json3 = await graphRow3.json();
+
   const chartData: ChartPoint[] = parseToChartData(json);
-  console.log(chartData)
+  const chartData2: ChartPoint[] = parseToChartData(json2);
+  const chartData3: ChartPoint[] = parseToChartData(json3);
   return (
     <div className="relative w-full ">
       <div className="h-screen flex flex-col w-full p-3 items-center justify-center">
@@ -34,7 +75,8 @@ export default async function marketsId({ params }: Props) {
           <div className="border w-[80vw] h-[40vw] flex shadow-lg">
             <div className="w-full h-full items-center  flex flex-col">
               <div className="flex items-center h-[70%] justify-center w-full border">
-              <PriceChart data={chartData}/>
+                <PriceChart series={series} />
+
               </div>
               <div className="flex flex-col w-full max-h-80 border  overflow-y-auto ">
                 {jsonRows.markets.map((m: any) => (
@@ -70,6 +112,4 @@ export default async function marketsId({ params }: Props) {
       </div>
     </div>
   );
-  
 }
-
