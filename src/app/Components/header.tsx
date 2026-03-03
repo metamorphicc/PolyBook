@@ -14,7 +14,6 @@ export default function Header() {
   const { openModal, closeModal } = useModal();
   const { address, isConnected, status } = useAppKitAccount();
   const [safe, setSafe] = useState();
-  
 
   useEffect(() => {
     setLoading(true);
@@ -32,17 +31,14 @@ export default function Header() {
         const { proxyAddress } = await safeRes.json();
         setSafe(proxyAddress[0].safe_address);
         console.log("safe address:", proxyAddress[0].safe_address);
-        console.log(safe)
+        console.log(safe);
       } catch {}
     };
     initAccount();
     setLoading(false);
-
   });
   const handleDeposit = () => {
-    openModal(
-      <DepositContent address={safe as any} closeModal={closeModal} />
-    );
+    openModal(<DepositContent address={safe as any} closeModal={closeModal} />);
   };
   return (
     <div className="px-4 py-2 rounded-[30px] w-[90vw] border border-sky-300/30 mb-3 shadow-lg hover:shadow-xl sticky">
@@ -53,7 +49,7 @@ export default function Header() {
             onClick={() => router.push("/home")}
           >
             <Image
-              src="/logo.png"
+              src="/logo_blue.jpg"
               alt="logo"
               width={40}
               height={40}
@@ -66,7 +62,22 @@ export default function Header() {
         <div className="flex justify-center">
           <ul className="flex items-center gap-4">
             <li>
-              <button className="border rounded-md px-4 py-1.5 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer">
+              <button
+                onClick={() => {
+                  router.push("/home");
+                }}
+                className="border border-2 rounded-md px-4 py-1.5 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer"
+              >
+                Home
+              </button>
+            </li>
+            <li>
+              <button
+                onClick={() => {
+                  router.push("/markets");
+                }}
+                className="border rounded-md px-4 py-1.5 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer"
+              >
                 Markets
               </button>
             </li>

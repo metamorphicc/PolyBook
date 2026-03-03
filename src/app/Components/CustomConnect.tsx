@@ -20,7 +20,7 @@ function useEthersSigner() {
       ensAddress: chain.contracts?.ensRegistry?.address,
     };
     const provider = new BrowserProvider(transport, network);
-    return new JsonRpcSigner(provider, account.address);
+    return new JsonRpcSigner(provider, account?.address);
   }, [client]);
 }
 
