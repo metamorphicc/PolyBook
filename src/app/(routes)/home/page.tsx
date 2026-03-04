@@ -10,7 +10,8 @@ import { useEffect, useState, useMemo } from "react";
 import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
 import TrendingSearch from "./trendingSearch";
-
+import SearchContainer from "@/app/Components/searchContainer";
+import ScalpSection from "@/app/Components/scalpSection";
 
 export function useEthersSigner() {
   const { address, isConnected } = useAccount();
@@ -47,8 +48,28 @@ export default function Home() {
           <TrendingSearch />
         </div>
         <div className=" h-full w-full  flex flex-col justify-between">
-          <div className="w-full h-[60%] shadow-lg"></div>
-          <div className="w-full h-[30%] shadow-lg"></div>
+          <ScalpSection />
+          <div className="w-full h-[30%] flex flex-col items-center justify-center">
+            <div className="shadow-lg w-full hover:scale-101 transition h-[90%] rounded-[30px] p-5 flex gap-5">
+              <div className="flex flex-1 gap-3 items-center">
+                <Image
+                  src={"/logo_blue.jpg"}
+                  height={40}
+                  width={40}
+                  alt="132"
+                  className="flex-shrink-0 object-contain"
+                ></Image>
+                <p>0x0000000000x000000000 </p>
+              </div>
+              <div className="flex gap-4 text-[14px] flex-1">
+                <p className="text-green-700">Profit today: {2 + 2}</p>
+                <p>Portfolio: {2 * 8}</p>
+              </div>
+              <div className="w-full flex flex-1 flex-col items-center justify-center">
+                *here's should be your graphic pnl *
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div className="flex flex-col w-full justify-center items-center">
@@ -101,8 +122,9 @@ export default function Home() {
       </div>
       <div className="flex-1 w-full flex justify-center">
         {/* ----- MARKETS PAGE -----*/}
+
         <Markets searchQuery={search} />
-          
+
         {/* <ScalpTerminal2 /> */}
         {/* <Markets/> */}
       </div>

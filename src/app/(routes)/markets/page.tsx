@@ -6,14 +6,13 @@ import Loading from "../../Components/Loading";
 import { useRouter } from "next/navigation";
 import Header from "@/app/Components/header";
 import { usePathname } from "next/navigation";
+import SearchContainer from "../../../app/Components/searchContainer";
 
 export default function Markets({ searchQuery }: { searchQuery: string }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const pathname = usePathname();
-  const [search, setSearch] = useState("");
+  const [ress, setRess] = useState<any[]>([]);
 
-  const [ress, setRess] = useState<any>([]);
   useEffect(() => {
     const parse = async () => {
       try {
@@ -30,57 +29,22 @@ export default function Markets({ searchQuery }: { searchQuery: string }) {
   }, []);
 
   const filteredMarkets = useMemo(() => {
-    if (!search) return ress;
+    if (!searchQuery) return ress;
 
-    const query = search.toLowerCase();
+    const query = searchQuery.toLowerCase();
 
     return ress.filter((market: any) => {
       const titleMatch = market.title?.toLowerCase().includes(query);
       const tagMatch = market.tags?.[0]?.label?.toLowerCase().includes(query);
       return titleMatch || tagMatch;
     });
-  }, [search, ress]);
+  }, [searchQuery, ress]);
 
   if (loading) return <Loading />;
-
   return (
     <div className="relative w-full flex flex-col items-center">
       {pathname !== "/home" && <Header />}
-      <div className="relative group max-w-xl w-full">
-        
-        {pathname !== "/home" && (
-          
-          <div>
-            <input
-              type="text"
-              value={search ?? ""}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="w-full border border-sky-300/50 rounded-2xl py-4 pl-12 pr-12 placeholder:text-gray-600"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-white"
-              >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+
       <div className="w-[90vw] p-4   rounded-md shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
           {filteredMarkets.map((market: any) => {

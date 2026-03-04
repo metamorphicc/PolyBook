@@ -42,13 +42,14 @@ export default async function marketsId({ params }: Props) {
     })
   );
 
+
   const market = jsonRows.markets[0];
   const market2 = jsonRows.markets[1];
   const market3 = jsonRows.markets[2];
 
-  const tokenId = JSON.parse(market.clobTokenIds);
-  const tokenId2 = JSON.parse(market2.clobTokenIds);
-  const tokenId3 = JSON.parse(market3.clobTokenIds);
+  const tokenId = market ? JSON.parse(market?.clobTokenIds) : "123";
+  const tokenId2 = market2 ?  JSON.parse(market2?.clobTokenIds) : "123";
+  const tokenId3 = market3 ? JSON.parse(market3?.clobTokenIds) : "123";
 
   const graphRow = await fetch(
     `http://localhost:3002/api/graphics?id=${tokenId[0]}`
@@ -66,6 +67,7 @@ export default async function marketsId({ params }: Props) {
   const chartData: ChartPoint[] = parseToChartData(json);
   const chartData2: ChartPoint[] = parseToChartData(json2);
   const chartData3: ChartPoint[] = parseToChartData(json3);
+  
   return (
     <div className="relative w-full ">
       <div className="h-screen flex flex-col w-full p-3 items-center justify-center">
