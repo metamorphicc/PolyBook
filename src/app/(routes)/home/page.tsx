@@ -16,7 +16,7 @@ import ScalpSection from "@/app/Components/scalpSection";
 export function useEthersSigner() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
-
+  
   return useMemo(() => {
     if (!isConnected || !walletClient) return null;
 
