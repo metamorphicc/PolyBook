@@ -3,12 +3,20 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import Loading from "../../Components/Loading";
-import { useRouter } from "next/navigation";
 import Header from "@/app/Components/header";
 import { usePathname } from "next/navigation";
-import SearchContainer from "../../../app/Components/searchContainer";
 
-export default function Markets({ searchQuery }: { searchQuery: string }) {
+type CategoryKey = "crypto" | "politics" | "sport";
+
+type MarketsProps = {
+  searchQuery: string;
+  activeCategories: CategoryKey[];
+};
+
+export default function Markets({
+  searchQuery,
+  activeCategories,
+}: MarketsProps) {
   const [loading, setLoading] = useState(false);
   const pathname = usePathname();
   const [ress, setRess] = useState<any[]>([]);
@@ -29,30 +37,67 @@ export default function Markets({ searchQuery }: { searchQuery: string }) {
   }, []);
 
   const filteredMarkets = useMemo(() => {
-    if (!searchQuery) return ress;
+    if (!searchQuery && activeCategories.length === 0) return ress;
 
-    const query = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase();
 
     return ress.filter((market: any) => {
-      const titleMatch = market.title?.toLowerCase().includes(query);
-      const tagMatch = market.tags?.[0]?.label?.toLowerCase().includes(query);
-      return titleMatch || tagMatch;
+      if (q) {
+        const title = market.title?.toLowerCase() ?? "";
+        const tag = market.tags?.[0]?.label?.toLowerCase() ?? "";
+        if (!title.includes(q) && !tag.includes(q)) {
+          return false;
+        }
+      }
+
+      if (activeCategories.length > 0) {
+        const category =
+          (market.category as string | undefined)?.toLowerCase() ??
+          market.tags?.[0]?.label?.toLowerCase() ??
+          "";
+
+        const matchesCategory = activeCategories.some((cat) => {
+          if (cat === "crypto") {
+            return (
+              category.includes("crypto") ||
+              category.includes("bitcoin") ||
+              category.includes("eth") ||
+              category.includes("sol")
+            );
+          }
+          if (cat === "politics") {
+            return (
+              category.includes("politic") ||
+              category.includes("election")
+            );
+          }
+          if (cat === "sport") {
+            return category.includes("sport");
+          }
+          return false;
+        });
+
+        if (!matchesCategory) return false;
+      }
+
+      return true;
     });
-  }, [searchQuery, ress]);
+  }, [searchQuery, activeCategories, ress]);
 
   if (loading) return <Loading />;
+
   return (
     <div className="relative w-full flex flex-col items-center">
       {pathname !== "/home" && <Header />}
 
-      <div className="w-[90vw] p-4   rounded-md shadow-lg">
+      <div className="w-[90vw] p-4 rounded-md shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
           {filteredMarkets.map((market: any) => {
             const data = new Date(market.endDate);
             return (
               <div
                 key={market.id}
-                className="flex flex-col shadow-xl p-4 border border-sky-300/50  rounded-lg min-h-[150px]"
+                className="flex flex-col shadow-xl p-4 border border-sky-300/50 rounded-lg min-h-[150px]"
               >
                 <div className="flex items-center gap-3 text-[15px] ">
                   <Image
@@ -61,7 +106,7 @@ export default function Markets({ searchQuery }: { searchQuery: string }) {
                     height={53}
                     src={`${market?.image}`}
                     className="rounded-[13px]"
-                  ></Image>
+                  />
                   <div className="flex items-center justify-between w-full">
                     <a
                       href={`markets/${market?.id}`}
@@ -70,13 +115,13 @@ export default function Markets({ searchQuery }: { searchQuery: string }) {
                       {market.title}
                     </a>
                     <button
-                      className="border border-sky-300/50 flex items-center rounded-xl h-5 px-2
-   w-fit whitespace-nowrap text-[12px]"
+                      className="border border-sky-300/50 flex items-center rounded-xl h-5 px-2 w-fit whitespace-nowrap text-[12px]"
                     >
                       {market.tags[0]?.label}
                     </button>
                   </div>
                 </div>
+
                 <div className="flex flex-col gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x justify-center">
                   <div className="flex flex-col gap-2 overflow-y-auto pr-1 h-[160px] items-center custom-scrollbar">
                     {[
@@ -106,6 +151,7 @@ export default function Markets({ searchQuery }: { searchQuery: string }) {
                     ))}
                   </div>
                 </div>
+
                 <div className="flex gap-1">
                   End: <div>{data.toLocaleDateString()}</div>
                 </div>
