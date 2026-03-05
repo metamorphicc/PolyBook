@@ -16,7 +16,7 @@ import ScalpSection from "@/app/Components/scalpSection";
 export function useEthersSigner() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
-  
+
   return useMemo(() => {
     if (!isConnected || !walletClient) return null;
 
@@ -72,9 +72,45 @@ export default function Home() {
           </div>
         </div>
       </div>
-      <div className="flex flex-col w-full justify-center items-center">
-        <div className="relative group max-w-xl w-full">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+      <div className="flex flex-col w-[80vw] min-h-20 justify-center items-center border">
+        <div className="relative group w-[80vw] flex min-h-20 items-center px-4">
+          <div>
+            <div className="w-full">
+              <input
+                type="text"
+                value={search ?? ""}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search..."
+                className="w-[20vw] border border-sky-300/50 rounded-2xl py-4 pl-12 pr-12 h-[5vh] placeholder:text-gray-600"
+              />
+
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute inset-y-0 left-0 pr-4 flex items-center text-gray-500 hover:text-white"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-[50%] flex flex-col justify-center items-center">
+            fjkdsfj
+
+          </div>
+          {/* <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
             <svg
               className="h-5 w-5 text-gray-400 transition-colors"
               fill="none"
@@ -88,36 +124,7 @@ export default function Home() {
                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
               />
             </svg>
-          </div>
-
-          <input
-            type="text"
-            value={search ?? ""}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search..."
-            className="w-full border border-sky-300/50 rounded-2xl py-4 pl-12 pr-12 placeholder:text-gray-600"
-          />
-
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-white"
-            >
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          )}
+          </div> */}
         </div>
       </div>
       <div className="flex-1 w-full flex justify-center">

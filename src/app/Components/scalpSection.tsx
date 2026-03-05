@@ -34,20 +34,60 @@ export default function ScalpSection() {
         }}
         className="flex items-center gap-3 px-5 py-3 border-b border-gray-200 hover:bg-zinc-100 cursor-pointer"
       >
-        <Image src={btc15m.icon == "" ? null : btc15m.icon} alt="img" width={30} height={30} />
-        <span className="truncate">{btc15m.title || "loading"}</span>
+        {eth15m.icon ? (
+      <Image
+        src={eth15m.icon}
+        alt="img"
+        width={30}
+        height={30}
+        className="rounded-[30px] w-[30px] h-[30px] object-contain flex-shrink-0"
+      />
+    ) : (
+      <div className="w-[30px] h-[30px] rounded-[30px] bg-gray-300 flex-shrink-0" />
+    )}
+    <span className="truncate">{eth15m.title || "loading"}</span>
       </div>
       <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200 hover:bg-zinc-100 cursor-pointer">
-        <Image src={eth15m.icon == "" ? null : eth15m.icon} alt="img" width={30} height={30} className="rounded-[30px]"/>
-        <span className="truncate">{eth15m.title || "loading"}</span>
+      {eth15m.icon ? (
+      <Image
+        src={eth15m.icon}
+        alt="img"
+        width={30}
+        height={30}
+        className="rounded-[30px] w-[30px] h-[30px] object-contain flex-shrink-0"
+      />
+    ) : (
+      <div className="w-[30px] h-[30px] rounded-[30px] bg-gray-300 flex-shrink-0" />
+    )}
+    <span className="truncate">{eth15m.title || "loading"}</span>
       </div>
       <div className="flex h-full items-center gap-3 px-5 py-3 border-b border-gray-200 hover:bg-zinc-100 cursor-pointer">
-        <Image src={btc15m.icon == "" ? null : btc15m.icon} alt="img" width={30} height={30} />
-        <span className="truncate">{btc15m.title || "loading"}</span>
+      {btc15m.icon ? (
+      <Image
+        src={btc15m.icon}
+        alt="img"
+        width={30}
+        height={30}
+        className="rounded-[30px] w-[30px] h-[30px] object-contain flex-shrink-0"
+      />
+    ) : (
+      <div className="w-[30px] h-[30px] rounded-[30px] bg-gray-300 flex-shrink-0" />
+    )}
+    <span className="truncate">{btc15m.title || "loading"}</span>
       </div>
       <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-200 hover:bg-zinc-100 cursor-pointer">
-        <Image src={eth15m.icon == "" ? null : eth15m.icon} alt="img" width={30} height={30} className="rounded-[30px]"/>
-        <span className="truncate">{eth15m.title || "loading"}</span>
+      {btc15m.icon ? (
+      <Image
+        src={btc15m.icon}
+        alt="img"
+        width={30}
+        height={30}
+        className="rounded-[30px] w-[30px] h-[30px] object-contain flex-shrink-0"
+      />
+    ) : (
+      <div className="w-[30px] h-[30px] rounded-[30px] bg-gray-300 flex-shrink-0" />
+    )}
+    <span className="truncate">{btc15m.title || "loading"}</span>
       </div>
     </div>
   );
