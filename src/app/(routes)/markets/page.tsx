@@ -37,9 +37,9 @@ export default function Markets({
   }, []);
 
   const filteredMarkets = useMemo(() => {
-    if (!searchQuery && activeCategories.length === 0) return ress;
+    if (!searchQuery && (activeCategories?.length === 0 || 0)) return ress;
 
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery?.toLowerCase() || "";
 
     return ress.filter((market: any) => {
       if (q) {
@@ -50,7 +50,7 @@ export default function Markets({
         }
       }
 
-      if (activeCategories.length > 0) {
+      if (activeCategories?.length || 0 > 0) {
         const category =
           (market.category as string | undefined)?.toLowerCase() ??
           market.tags?.[0]?.label?.toLowerCase() ??
