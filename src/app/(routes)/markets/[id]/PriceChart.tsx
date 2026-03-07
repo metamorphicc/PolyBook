@@ -45,7 +45,7 @@ export default function PriceChart({ series }: { series: Series[] }) {
 
     series.forEach((s, idx) => {
       const p = s.points[i];
-      row[`prob${idx}`] = p.probability * 100;
+      row[`prob${idx}`] = p?.probability || 0 * 100;
     });
 
     return row;

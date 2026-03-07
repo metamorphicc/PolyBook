@@ -3,6 +3,7 @@ import { GAMMA_HOST } from "../../../../app/share/main";
 import { parse } from "path/posix";
 import { parseToChartData } from "../../../../app/Components/parseData";
 import PriceChart from "./PriceChart";
+import EventDiv from "./EventDiv";
 
 type Props = { params: { id: string } };
 type RawPoint = { t: number; p: number };
@@ -73,7 +74,7 @@ export default async function marketsId({ params }: Props) {
       <div className="h-screen flex flex-col w-full p-3 items-center justify-center">
         <Header />
 
-        <div className="flex h-full items-center justify-center w-full">
+        {/* <div className="flex h-full items-center justify-center w-full">
           <div className="border w-[80vw] h-[40vw] flex shadow-lg">
             <div className="w-full h-full items-center  flex flex-col">
               <div className="flex items-center h-[70%] justify-center w-full border">
@@ -110,7 +111,8 @@ export default async function marketsId({ params }: Props) {
               </div>
             </div>
           </div>
-        </div>
+        </div> */}
+        <EventDiv markets={jsonRows.markets} series={series} />
       </div>
     </div>
   );
