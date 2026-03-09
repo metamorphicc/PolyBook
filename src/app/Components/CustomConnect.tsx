@@ -48,8 +48,9 @@ export default function CustomConnect() {
       : "0.00";
   useEffect(() => {
     setLoading(true);
+    if (isConnected || address || authDone) return;
+    console.log(`useeffect`)
 
-    if (!isConnected || !address || authDone) return;
     const initAccount = async () => {
       setLoading(true);
       try {

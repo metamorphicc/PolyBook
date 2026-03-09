@@ -29,9 +29,9 @@ export default function Header() {
         });
 
         const { proxyAddress } = await safeRes.json();
-        setSafe(proxyAddress[0].safe_address);
-        console.log("safe address:", proxyAddress[0].safe_address);
-        console.log(safe);
+
+        setSafe(proxyAddress);
+        console.log("safe address:", proxyAddress);
       } catch {}
     };
     initAccount();

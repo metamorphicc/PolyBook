@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import Safe from "@safe-global/protocol-kit";
 import { pool } from "../../db";
+import { RowDataPacket } from "mysql2";
 
 const RPC_URL =
   "https://polygon-mainnet.g.alchemy.com/v2/F6AAfcAUEeGEEAU6PWdwwIeb4sz1cMai";
 
 export async function POST(request: Request) {
   try {
+    console.log();
     const body = await request.json();
     const { ownerAddress } = body;
+    console.log(
+      `owner adds;` + ownerAddress
+    );
 
     if (!ownerAddress) {
       return NextResponse.json(
@@ -17,14 +22,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const checker = await pool.query(
-      "SELECT safe_address FROM USERS WHERE address = ?",
+    const [checker] = await pool.query<RowDataPacket[]>(
+      "SELECT safe_address FROM users WHERE address = ?",
       [ownerAddress]
     );
 
-    if (checker.length) {
-      console.log("user already registered");
-      return NextResponse.json({ proxyAddress: checker[0] });
+    if (checker && checker.length > 0) {
+      const existingSafeAddress = checker[0].safe_address;
+      console.log(existingSafeAddress)
+      return NextResponse.json({
+        ok: "ok",
+        proxyAddress: existingSafeAddress 
+      });
     }
 
     const safeSdk = await Safe.init({
