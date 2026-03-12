@@ -20,7 +20,6 @@ export default function Markets({
   const [loading, setLoading] = useState(false);
   const pathname = usePathname();
   const [ress, setRess] = useState<any[]>([]);
-
   useEffect(() => {
     const parse = async () => {
       try {
@@ -67,8 +66,7 @@ export default function Markets({
           }
           if (cat === "politics") {
             return (
-              category.includes("politic") ||
-              category.includes("election")
+              category.includes("politic") || category.includes("election")
             );
           }
           if (cat === "sport") {
@@ -93,6 +91,8 @@ export default function Markets({
       <div className="w-[90vw] p-4 rounded-md shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
           {filteredMarkets.map((market: any) => {
+            const liquidity = Math.trunc(market.liquidity);
+
             const data = new Date(market.endDate);
             return (
               <div
@@ -114,17 +114,15 @@ export default function Markets({
                     >
                       {market.title}
                     </a>
-                    <button
-                      className="border border-sky-300/50 flex items-center rounded-xl h-5 px-2 w-fit whitespace-nowrap text-[12px]"
-                    >
+                    <button className="border border-sky-300/50 flex items-center rounded-xl h-5 px-2 w-fit whitespace-nowrap text-[12px]">
                       {market.tags[0]?.label}
                     </button>
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x justify-center">
-                  <div className="flex flex-col gap-2 overflow-y-auto pr-1 h-[160px] items-center custom-scrollbar">
-                    {[
+                  <div className="flex flex-col gap-2 overflow-y-auto pr-1  items-center custom-scrollbar">
+                    {/* {[
                       { name: "Alexandria O...", yes: "9¢", no: "92¢" },
                       { name: "Kamala Harris", yes: "6¢", no: "94¢" },
                       { name: "Jon Ossoff", yes: "5¢", no: "95¢" },
@@ -148,12 +146,17 @@ export default function Markets({
                           </button>
                         </div>
                       </div>
-                    ))}
+                    ))} */}
                   </div>
                 </div>
 
-                <div className="flex gap-1">
-                  End: <div>{data.toLocaleDateString()}</div>
+                <div className="flex justify-between items-end h-full">
+                  <div>
+                    End: <span>{data.toLocaleDateString()}</span>
+                  </div>
+                  <div>
+                    <span>Value: ${liquidity}</span>
+                  </div>
                 </div>
               </div>
             );
