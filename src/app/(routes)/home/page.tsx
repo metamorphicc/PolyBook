@@ -2,7 +2,6 @@
 
 import { useAppKitAccount } from "@reown/appkit/react";
 import Header from "../../Components/header";
-import ScalpTerminal2 from "../../Components/ScalpBook";
 import Markets from "../markets/page";
 import Image from "next/image";
 import { useEffect, useState, useMemo } from "react";
@@ -18,7 +17,7 @@ export function useEthersSigner() {
   return useMemo(() => {
     if (!isConnected || !walletClient) return null;
 
-    const provider = new ethers.BrowserProvider(walletClient as any);
+    const provider = new ethers.providers.Web3Provider(walletClient as any);
     return provider.getSigner(address);
   }, [address, isConnected, walletClient]);
 }
@@ -26,17 +25,13 @@ export function useEthersSigner() {
 type CategoryKey = "crypto" | "politics" | "sport";
 
 export default function Home() {
-  const signerPromise = useEthersSigner();
-  useEffect(() => {
-    const run = async () => {
-      if (!signerPromise) return;
-      const signer = await signerPromise;
-      if (!signer) return;
-    };
-    run();
-  }, [signerPromise]);
+  const signer = useEthersSigner();
 
-  const { address, isConnected, status } = useAppKitAccount();
+  useEffect(() => {
+    if (!signer) return;
+  }, [signer]);
+
+  const { address, isConnected } = useAppKitAccount();
   const [search, setSearch] = useState("");
   const [activeCategories, setActiveCategories] = useState<CategoryKey[]>([]);
 
@@ -65,17 +60,17 @@ export default function Home() {
                   src={"/logo_blue.jpg"}
                   height={40}
                   width={40}
-                  alt="132"
+                  alt="logo"
                   className="flex-shrink-0 object-contain"
                 />
-                <p>0x0000000000x000000000 </p>
+                <p>0x0000000000x000000000</p>
               </div>
               <div className="flex gap-4 text-[14px] flex-1">
                 <p className="text-green-700">Profit today: {2 + 2}</p>
                 <p>Portfolio: {2 * 8}</p>
               </div>
               <div className="w-full flex flex-1 flex-col items-center justify-center">
-                *here's should be your graphic pnl *
+                *here's should be your graphic pnl*
               </div>
             </div>
           </div>
@@ -92,24 +87,13 @@ export default function Home() {
               placeholder="Search..."
               className="w-[20vw] border border-sky-300/50 rounded-2xl py-4 pl-4 pr-10 h-[5vh] placeholder:text-gray-600"
             />
-
             {search && (
               <button
                 onClick={() => setSearch("")}
                 className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-white"
               >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             )}
@@ -118,55 +102,28 @@ export default function Home() {
           <div className="w-[50%] flex justify-center items-center gap-3">
             <span>choose category: </span>
             <ul className="gap-3 flex">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => toggleCategory("crypto")}
-                  className={`border px-2 cursor-pointer rounded ${
-                    isActive("crypto")
-                      ? "bg-sky-500 text-black border-sky-500"
-                      : "border-sky-300/50"
-                  }`}
-                >
-                  Crypto
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => toggleCategory("politics")}
-                  className={`border px-2 cursor-pointer rounded ${
-                    isActive("politics")
-                      ? "bg-sky-500 text-black border-sky-500"
-                      : "border-sky-300/50"
-                  }`}
-                >
-                  Politics
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => toggleCategory("sport")}
-                  className={`border px-2 cursor-pointer rounded ${
-                    isActive("sport")
-                      ? "bg-sky-500 text-black border-sky-500"
-                      : "border-sky-300/50"
-                  }`}
-                >
-                  Sport
-                </button>
-              </li>
+              {(["crypto", "politics", "sport"] as CategoryKey[]).map((cat) => (
+                <li key={cat}>
+                  <button
+                    type="button"
+                    onClick={() => toggleCategory(cat)}
+                    className={`border px-2 cursor-pointer rounded ${
+                      isActive(cat)
+                        ? "bg-sky-500 text-black border-sky-500"
+                        : "border-sky-300/50"
+                    }`}
+                  >
+                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
       </div>
 
       <div className="flex-1 w-full flex justify-center">
-        <Markets
-          searchQuery={search}
-          activeCategories={activeCategories}
-        />
+        <Markets searchQuery={search} activeCategories={activeCategories} />
       </div>
     </div>
   );

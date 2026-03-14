@@ -1,15 +1,28 @@
-import { ClobClient } from '@polymarket/clob-client';
-
+import { ClobClient } from "@polymarket/clob-client";
 export async function initPolymarketClient(signer: any, proxyAddress: string) {
-    const HOST = "https://clob.polymarket.com";
-    
-    const client = new ClobClient(HOST, signer);
-    
-    const apiCreds = await (client as any).api.createOrDeriveApiKey();
-    
-    const tradingClient = new ClobClient(HOST, signer, apiCreds);
-    (tradingClient as any).funderAddress = proxyAddress;
-    (tradingClient as any).signatureType = 2;
+  const HOST = "https://clob.polymarket.com";
+  const CHAIN_ID = 137;
 
-    return tradingClient;
+  
+  const tempClient = new ClobClient(
+    HOST,
+    CHAIN_ID,
+    signer,
+    undefined, 
+    2, 
+    proxyAddress 
+  );
+
+  const apiCreds = await tempClient.createOrDeriveApiKey();
+
+  const client = new ClobClient(
+    HOST,
+    CHAIN_ID,
+    signer,
+    apiCreds,
+    2,
+    proxyAddress
+  );
+
+  return client;
 }

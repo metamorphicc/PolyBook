@@ -3,9 +3,24 @@
 import { useState } from "react";
 import PriceChart from "./PriceChart";
 import UnlockTrading from "@/app/Components/UnlockTrading";
+import { useAppKitAccount } from "@reown/appkit/react";
+import { useConnectorClient } from "wagmi";
+import { ethers } from "ethers";
+import { useMemo } from "react";
+import { Side } from "@polymarket/clob-client";
 
 type Market = { id: string; question: string; clobTokenIds: string };
 type Selected = { market: Market | null; side: "yes" | "no" | null };
+
+function useEthersSigner() {
+  const { data: client } = useConnectorClient();
+  return useMemo(() => {
+    if (!client) return undefined;
+    const { account, transport } = client;
+    const provider = new ethers.providers.Web3Provider(transport as any);
+    return provider.getSigner(account?.address);
+  }, [client]);
+}
 
 export default function EventDiv({
   markets,
@@ -18,6 +33,96 @@ export default function EventDiv({
     market: null,
     side: null,
   });
+  const [amount, setAmount] = useState("");
+  const [orderLog, setOrderLog] = useState<string[]>([]);
+  const [placing, setPlacing] = useState(false);
+
+  const { address } = useAppKitAccount();
+  const signer = useEthersSigner();
+
+  const log = (msg: string) => {
+    console.log(msg);
+    setOrderLog((prev) => [...prev, msg]);
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!selected.market || !selected.side || !amount) {
+      log("❌ Выбери маркет, сторону и введи сумму");
+      return;
+    }
+    if (!signer || !address) {
+      log("❌ Кошелёк не подключён");
+      return;
+    }
+
+    setPlacing(true);
+    setOrderLog([]);
+
+    try {
+      const savedRaw = localStorage.getItem(`poly_creds_${address}`);
+      if (!savedRaw) {
+        log("❌ Нет сохранённых creds — переподключись");
+        return;
+      }
+      const { safeAddr } = JSON.parse(savedRaw);
+      log(`✅ Safe адрес: ${safeAddr}`);
+
+      log("🔧 Инициализация ClobClient...");
+      const { initPolymarketClient } = await import(
+        "../../../Components/verifyUser"
+      );
+      const client = await initPolymarketClient(signer, safeAddr);
+      log("✅ ClobClient готов");
+
+      const tokenIds = JSON.parse(selected.market.clobTokenIds);
+      const tokenId = selected.side === "yes" ? tokenIds[0] : tokenIds[1];
+      log(`📌 TokenId: ${tokenId}`);
+      log(`📌 Side: ${selected.side.toUpperCase()}, Amount: $${amount}`);
+
+      log("📊 Получаем стакан...");
+      const book = await client.getOrderBook(tokenId);
+      const bestAsk = book?.asks?.[0]?.price;
+      const bestBid = book?.bids?.[0]?.price;
+      log(`📊 Best ask: ${bestAsk}, Best bid: ${bestBid}`);
+
+      const price =
+        selected.side === "yes"
+          ? parseFloat(bestAsk ?? "0.5")
+          : parseFloat(bestBid ?? "0.5");
+
+      log(`💰 Используем цену: ${price}`);
+
+      const orderArgs = {
+        tokenID: tokenId,
+        price,
+        side: selected.side === "yes" ? Side.BUY : Side.SELL,
+        size: parseFloat(amount),
+      };
+
+      log(`📝 Параметры ордера: ${JSON.stringify(orderArgs)}`);
+
+      log("🚀 Создаём ордер...");
+      const order = await client.createOrder(orderArgs);
+      log(`✅ Ордер создан: ${JSON.stringify(order)}`);
+
+      log("📤 Отправляем ордер через прокси...");
+      const result = await fetch("/api/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order,
+          headers: (client as any).creds, 
+        }),
+      });
+      const data = await result.json();
+      log(`🎉 Результат: ${JSON.stringify(data)}`);
+    } catch (e: any) {
+      log(`❌ Ошибка: ${e?.message ?? String(e)}`);
+      console.error(e);
+    } finally {
+      setPlacing(false);
+    }
+  };
 
   return (
     <div className="flex h-full items-center justify-center w-full">
@@ -60,8 +165,8 @@ export default function EventDiv({
           </div>
         </div>
 
-        <div className="w-full flex flex-col h-full p-15 justify-between ">
-          <div className="w-full h-[60%] w-[50%] border rounded-[40px] items-center flex justify-center p-5">
+        <div className="w-full flex flex-col h-full p-15 justify-between">
+          <div className="w-full h-[60%] border rounded-[40px] items-center flex justify-center p-5">
             <UnlockTrading>
               {selected.market ? (
                 <div className="flex flex-col h-full gap-3 p-5 w-[80%]">
@@ -96,12 +201,27 @@ export default function EventDiv({
                     <div className="flex flex-col gap-2 mt-1">
                       <input
                         type="number"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
                         placeholder="Amount (USDC)"
                         className="border rounded-[10px] px-3 py-1.5 text-sm bg-transparent"
                       />
-                      <button className="bg-blue-500 hover:bg-blue-400 text-white rounded-[10px] py-1.5 text-sm">
-                        Place Order
+                      <button
+                        onClick={handlePlaceOrder}
+                        disabled={placing}
+                        className="bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white rounded-[10px] py-1.5 text-sm"
+                      >
+                        {placing ? "Placing..." : "Place Order"}
                       </button>
+                    </div>
+                  )}
+
+                  {/* Лог ордера */}
+                  {orderLog.length > 0 && (
+                    <div className="mt-2 bg-black/40 rounded-[10px] p-3 text-xs font-mono flex flex-col gap-1 max-h-40 overflow-y-auto">
+                      {orderLog.map((line, i) => (
+                        <span key={i}>{line}</span>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -111,7 +231,7 @@ export default function EventDiv({
             </UnlockTrading>
           </div>
 
-          <div className="p-10 h-[30%] flex items-center justify-center rounded-[40px] flex w-full border">
+          <div className="p-10 h-[30%] flex items-center justify-center rounded-[40px] w-full border">
             Smth
           </div>
         </div>

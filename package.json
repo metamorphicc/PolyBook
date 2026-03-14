@@ -27,7 +27,7 @@
     "clsx": "^2.1.1",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
-    "ethers": "^6.16.0",
+    "ethers": "^5.7.2",
     "express": "^5.2.1",
     "hardhat": "^3.1.9",
     "jsonwebtoken": "^9.0.3",
