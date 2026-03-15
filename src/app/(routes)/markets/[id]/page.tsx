@@ -13,6 +13,10 @@ type ApiResponse = { history: RawPoint[] };
 type ChartPoint = { timestamp: number; probability: number };
 const id = "";
 
+const base = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
+  : "http://localhost:3002"; 
+
 export default async function marketsId({ params }: Props) {
   const param = await params;
   const marketId = param.id;
@@ -27,10 +31,7 @@ export default async function marketsId({ params }: Props) {
     targetMarkets.map(async (m: any, idx: any) => {
       const [yesTokenId] = JSON.parse(m.clobTokenIds) as string[];
 
-      const historyRes = await fetch(
-        `http://localhost:3002/api/graphics?id=${yesTokenId}`,
-        { cache: "no-store" }
-      );
+      const historyRes = await fetch(`${base}/api/graphics?id=${yesTokenId}`);
       const json = await historyRes.json();
       const points = parseToChartData(json); 
 
