@@ -8,7 +8,7 @@ export default function Profile() {
   const { address, isConnected, status } = useAppKitAccount();
   const [balance, setBalance] = useState<any>(null);
   const router = useRouter();
-  
+
   return (
     <>
       <div className="flex flex-col items-center h-screen py-5 gap-15 overflow-hidden">
@@ -21,17 +21,29 @@ export default function Profile() {
                   <Image
                     src={"/logo.png"}
                     alt="img"
-                    width={45}
-                    height={45}
+                    width={65}
+                    height={65}
                     className="rounded-[60px]"
                   />
-                  <div>
+                  <div className="min-w-55 max-w-60">
                     <p className="font-bold text-[19px]">Morph</p>
-                    <span className="font-stretch-expanded">
-                      description blab bbla bla
-                    </span>
+                    <div className="flex gap-2">
+                      <span className="font-stretch-expanded">
+                        Say something abt you...
+                      </span>
+                      <button className="cursor-pointer hover:scale-110 transition">
+                        <Image
+                          alt="123"
+                          width={12}
+                          height={12}
+                          src={"/edit.svg"}
+                        />
+                      </button>
+                    </div>
                   </div>
-                  <button>send</button>
+                  <div className="flex justify-center w-full">
+                    <button>send</button>
+                  </div>
                 </div>
               </div>
               <div className="h-[90%]">
@@ -50,7 +62,9 @@ export default function Profile() {
                 </div>
               </div>
               <div className="h-[70%] ">
-                <div className="h-[90%] flex justify-center shadow-lg rounded-[30px] p-5">markets(?)</div>
+                <div className="h-[90%] flex justify-center shadow-lg rounded-[30px] p-5">
+                  markets(?)
+                </div>
               </div>
             </div>
           </div>

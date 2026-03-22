@@ -9,31 +9,64 @@ import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
 import TrendingSearch from "./trendingSearch";
 import ScalpSection from "@/app/Components/scalpSection";
+import { USDC_E_ADDRESS, ERC20_ABI } from "@/app/share/main";
 
-export function useEthersSigner() {
-  const { address, isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
 
-  return useMemo(() => {
-    if (!isConnected || !walletClient) return null;
 
-    const provider = new ethers.providers.Web3Provider(walletClient as any);
-    return provider.getSigner(address);
-  }, [address, isConnected, walletClient]);
-}
+
 
 type CategoryKey = "crypto" | "politics" | "sport";
 
 export default function Home() {
+  const { address, isConnected } = useAccount();
+
+  function useEthersSigner() {
+    const { data: walletClient } = useWalletClient();
+    console.log(address)
+  
+    return useMemo(() => {
+      if (!isConnected || !walletClient) return null;
+  
+      const provider = new ethers.providers.Web3Provider(walletClient as any);
+      return provider.getSigner(address);
+    }, [address, isConnected, walletClient]);
+  }
+  const [safeAddress, setSafeAddress] = useState()
   const signer = useEthersSigner();
 
   useEffect(() => {
     if (!signer) return;
+    const getSafe = async () => {
+      const row = await fetch("/api/getSafeWallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      const jsonRow = await row.json();
+      setSafeAddress(jsonRow.safeAddress)
+    }
+    getSafe();
   }, [signer]);
-
-  const { address, isConnected } = useAppKitAccount();
+  const [safeBalance, setSafeBalance] = useState<string>("0.00");
   const [search, setSearch] = useState("");
   const [activeCategories, setActiveCategories] = useState<CategoryKey[]>([]);
+
+
+
+  const fetchSafeBalance = async (safeAddr: string) => {
+    if (!signer) return;
+    try {
+      const contract = new ethers.Contract(USDC_E_ADDRESS, ERC20_ABI, signer.provider);
+      const balance = await contract.balanceOf(safeAddr);
+      const formatted = ethers.utils.formatUnits(balance, 6); 
+      setSafeBalance(formatted);
+      console.log(`safe balance (${safeAddr.slice(0,6)}): ${formatted} USDC.e`);
+    } catch (e) {
+      console.error("an unexpected error", e);
+    }
+  };
+
+
 
   const toggleCategory = (cat: CategoryKey) => {
     setActiveCategories(prev =>
@@ -63,7 +96,7 @@ export default function Home() {
                   alt="logo"
                   className="flex-shrink-0 object-contain"
                 />
-                <p>0x0000000000x000000000</p>
+                <p className="text-[14px] text-zinc-700 cursor-pointer">{safeAddress}</p>
               </div>
               <div className="flex gap-4 text-[14px] flex-1">
                 <p className="text-green-700">Profit today: {2 + 2}</p>

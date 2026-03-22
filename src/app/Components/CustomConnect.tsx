@@ -8,7 +8,7 @@ import { useConnectorClient } from "wagmi";
 import { ethers } from "ethers";
 import { useBalance } from "wagmi";
 import { formatUnits } from "viem";
-
+import { USDC_E_ADDRESS, ERC20_ABI } from "../share/main";
 function useEthersSigner() {
   const { data: client } = useConnectorClient();
   return useMemo(() => {
@@ -20,6 +20,25 @@ function useEthersSigner() {
 }
 
 export default function CustomConnect() {
+  const [safeBalance, setSafeBalance] = useState<any>();
+  const fetchSafeBalance = async (safeAddr: string) => {
+    if (!signer) return;
+    try {
+      const contract = new ethers.Contract(
+        USDC_E_ADDRESS,
+        ERC20_ABI,
+        signer.provider
+      );
+      const balance = await contract.balanceOf(safeAddr);
+      const formatted = ethers.utils.formatUnits(balance, 6);
+      setSafeBalance(formatted);
+      console.log(
+        `safe balance (${safeAddr.slice(0, 6)}): ${formatted} USDC.e`
+      );
+    } catch (e) {
+      console.error("error with get balance", e);
+    }
+  };
   const signer = useEthersSigner();
   const { address, isConnected } = useAppKitAccount();
   const { open } = useAppKit();
@@ -30,15 +49,16 @@ export default function CustomConnect() {
   const [loading, setLoading] = useState(false);
   const [safe, setSafe] = useState<any>();
   const [client, setClient] = useState<any>();
-  const [safeAddress, setSafeAddress] = useState<`0x${string}` | undefined>();
+  const [safeAddress, setSafeAddress] = useState<any>();
 
   const { data: balance } = useBalance({
     address: safeAddress,
     query: { enabled: !!safeAddress },
   });
 
-  const formattedBalance =
-    balance?.value ? formatUnits(balance.value, balance.decimals) : "0.00";
+  const formattedBalance = balance?.value
+    ? formatUnits(balance.value, balance.decimals)
+    : "0.00";
 
   useEffect(() => {
     if (!isConnected || !address || !signer || authDone) return;
@@ -48,7 +68,15 @@ export default function CustomConnect() {
       setAuthDone(true);
       return;
     }
-
+    // const getSafe = async () => {
+    //     const row = await fetch("/api/getSafeWallet", {
+    //       method: "POST",
+    //       headers: { "Content-Type": "application/json" },
+    //       body: JSON.stringify({ address }),
+    //     });
+    //     const jsonRow = await row.json();
+    //     setSafeAddress(jsonRow.safeAddress)
+    //   }
     const initAccount = async () => {
       setLoading(true);
       try {
@@ -68,7 +96,10 @@ export default function CustomConnect() {
         const tradingClient = await initPolymarketClient(signer, safeAddr);
         setClient(tradingClient);
 
-        localStorage.setItem(`poly_creds_${address}`, JSON.stringify({ safeAddr }));
+        localStorage.setItem(
+          `poly_creds_${address}`,
+          JSON.stringify({ safeAddr })
+        );
         setAuthDone(true);
       } catch (e) {
         console.error("initAccount error:", e);
@@ -76,6 +107,8 @@ export default function CustomConnect() {
         setLoading(false);
       }
     };
+
+    fetchSafeBalance(safeAddress)
 
     initAccount();
   }, [isConnected, address, authDone]);
@@ -105,7 +138,7 @@ export default function CustomConnect() {
           <div className="flex px-3">
             <div className="flex items-center">
               <span className="flex items-center flex-col">
-                Cash: <p className="ml-1 text-[14px]">{formattedBalance} POL</p>
+                Cash: <p className="ml-1 text-[14px]">{safeBalance || "0"}</p>
               </span>
             </div>
             <div>
