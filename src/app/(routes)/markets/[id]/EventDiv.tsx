@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import PriceChart from "./PriceChart";
 import UnlockTrading from "@/app/Components/UnlockTrading";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { useConnectorClient } from "wagmi";
 import { ethers } from "ethers";
-import { useMemo } from "react";
 import { Side } from "@polymarket/clob-client";
 
 type Market = { id: string; question: string; clobTokenIds: string };
@@ -36,6 +35,8 @@ export default function EventDiv({
   const [amount, setAmount] = useState("");
   const [orderLog, setOrderLog] = useState<string[]>([]);
   const [placing, setPlacing] = useState(false);
+  
+  const [polyClient, setPolyClient] = useState<any>(null);
 
   const { address } = useAppKitAccount();
   const signer = useEthersSigner();
@@ -45,13 +46,52 @@ export default function EventDiv({
     setOrderLog((prev) => [...prev, msg]);
   };
 
+
+  const initSession = async () => {
+    if (!signer || !address || polyClient) return;
+
+    try {
+      
+      const dbRes = await fetch("/api/getSafeWallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      const dbData = await dbRes.json();
+
+      if (!dbData.ok || !dbData.safeAddress) {
+        return;
+      }
+
+      const { initPolymarketClient } = await import("../../../Components/verifyUser");
+      const client = await initPolymarketClient(signer, dbData.safeAddress);
+      
+      setPolyClient(client);
+    } catch (e: any) {
+    }
+  };
+
+  const isInitializing = useRef(false);
+
+useEffect(() => {
+  const start = async () => {
+    if (polyClient || isInitializing.current || !address || !signer) return;
+
+    isInitializing.current = true;
+    await initSession();
+    isInitializing.current = false;
+  };
+
+  start();
+}, [address, signer]);
+
   const handlePlaceOrder = async () => {
-    if (!selected.market || !selected.side || !amount) {
-      log("❌ Выбери маркет, сторону и введи сумму");
+    if (!polyClient) {
+      await initSession();
       return;
     }
-    if (!signer || !address) {
-      log("❌ Кошелёк не подключён");
+
+    if (!selected.market || !selected.side || !amount) {
       return;
     }
 
@@ -59,65 +99,35 @@ export default function EventDiv({
     setOrderLog([]);
 
     try {
-      const savedRaw = localStorage.getItem(`poly_creds_${address}`);
-      if (!savedRaw) {
-        log("❌ Нет сохранённых creds — переподключись");
-        return;
-      }
-      const { safeAddr } = JSON.parse(savedRaw);
-      log(`✅ Safe адрес: ${safeAddr}`);
-
-      log("🔧 Инициализация ClobClient...");
-      const { initPolymarketClient } = await import(
-        "../../../Components/verifyUser"
-      );
-      const client = await initPolymarketClient(signer, safeAddr);
-      log("✅ ClobClient готов");
-
       const tokenIds = JSON.parse(selected.market.clobTokenIds);
       const tokenId = selected.side === "yes" ? tokenIds[0] : tokenIds[1];
-      log(`📌 TokenId: ${tokenId}`);
-      log(`📌 Side: ${selected.side.toUpperCase()}, Amount: $${amount}`);
-
-      log("📊 Получаем стакан...");
-      const book = await client.getOrderBook(tokenId);
+      
+      const book = await polyClient.getOrderBook(tokenId);
       const bestAsk = book?.asks?.[0]?.price;
       const bestBid = book?.bids?.[0]?.price;
-      log(`📊 Best ask: ${bestAsk}, Best bid: ${bestBid}`);
 
-      const price =
-        selected.side === "yes"
+      const price = selected.side === "yes"
           ? parseFloat(bestAsk ?? "0.5")
           : parseFloat(bestBid ?? "0.5");
 
-      log(`💰 Используем цену: ${price}`);
-
-      const orderArgs = {
+      const order = await polyClient.createOrder({
         tokenID: tokenId,
         price,
         side: selected.side === "yes" ? Side.BUY : Side.SELL,
         size: parseFloat(amount),
-      };
+      });
 
-      log(`📝 Параметры ордера: ${JSON.stringify(orderArgs)}`);
-
-      log("🚀 Создаём ордер...");
-      const order = await client.createOrder(orderArgs);
-      log(`✅ Ордер создан: ${JSON.stringify(order)}`);
-
-      log("📤 Отправляем ордер через прокси...");
       const result = await fetch("/api/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           order,
-          headers: (client as any).creds, 
+          headers: polyClient.creds, 
         }),
       });
+      
       const data = await result.json();
-      log(`🎉 Результат: ${JSON.stringify(data)}`);
     } catch (e: any) {
-      log(`❌ Ошибка: ${e?.message ?? String(e)}`);
       console.error(e);
     } finally {
       setPlacing(false);
@@ -175,9 +185,7 @@ export default function EventDiv({
                   </p>
                   <div className="flex justify-between gap-3 w-full">
                     <button
-                      onClick={() =>
-                        setSelected((s) => ({ ...s, side: "yes" }))
-                      }
+                      onClick={() => setSelected((s) => ({ ...s, side: "yes" }))}
                       className={`px-4 py-1.5 rounded-[10px] text-white transition ${
                         selected.side === "yes"
                           ? "bg-green-600 ring-2 ring-green-300"
@@ -216,7 +224,6 @@ export default function EventDiv({
                     </div>
                   )}
 
-                  {/* Лог ордера */}
                   {orderLog.length > 0 && (
                     <div className="mt-2 bg-black/40 rounded-[10px] p-3 text-xs font-mono flex flex-col gap-1 max-h-40 overflow-y-auto">
                       {orderLog.map((line, i) => (
@@ -232,7 +239,7 @@ export default function EventDiv({
           </div>
 
           <div className="p-10 h-[30%] flex items-center justify-center rounded-[40px] w-full border">
-            Smth
+            {!polyClient ? "Initializing session..." : "Terminal is Active"}
           </div>
         </div>
       </div>
