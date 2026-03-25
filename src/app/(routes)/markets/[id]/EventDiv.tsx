@@ -51,23 +51,29 @@ export default function EventDiv({
     if (!signer || !address || polyClient) return;
 
     try {
-      
       const dbRes = await fetch("/api/getSafeWallet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address }),
       });
+      
       const dbData = await dbRes.json();
+      
+      const safeAddr = dbData.safeAddress;
 
-      if (!dbData.ok || !dbData.safeAddress) {
+      if (!safeAddr) {
+        console.error("no address: ", dbData);
         return;
       }
 
+      console.log("Safe is found:", safeAddr);
+
       const { initPolymarketClient } = await import("../../../Components/verifyUser");
-      const client = await initPolymarketClient(signer, dbData.safeAddress);
+      const client = await initPolymarketClient(signer, safeAddr);
       
       setPolyClient(client);
     } catch (e: any) {
+      console.error("error initialization", e);
     }
   };
 

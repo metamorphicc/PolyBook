@@ -11,10 +11,6 @@ import TrendingSearch from "./trendingSearch";
 import ScalpSection from "@/app/Components/scalpSection";
 import { USDC_E_ADDRESS, ERC20_ABI } from "@/app/share/main";
 
-
-
-
-
 type CategoryKey = "crypto" | "politics" | "sport";
 
 export default function Home() {
@@ -22,16 +18,16 @@ export default function Home() {
 
   function useEthersSigner() {
     const { data: walletClient } = useWalletClient();
-    console.log(address)
-  
+    console.log(address);
+
     return useMemo(() => {
       if (!isConnected || !walletClient) return null;
-  
+
       const provider = new ethers.providers.Web3Provider(walletClient as any);
       return provider.getSigner(address);
     }, [address, isConnected, walletClient]);
   }
-  const [safeAddress, setSafeAddress] = useState()
+  const [safeAddress, setSafeAddress] = useState();
   const signer = useEthersSigner();
 
   useEffect(() => {
@@ -43,39 +39,54 @@ export default function Home() {
         body: JSON.stringify({ address }),
       });
       const jsonRow = await row.json();
-      setSafeAddress(jsonRow.safeAddress)
-    }
+      setSafeAddress(jsonRow.safeAddress);
+    };
     getSafe();
   }, [signer]);
   const [safeBalance, setSafeBalance] = useState<string>("0.00");
   const [search, setSearch] = useState("");
+  const [copied, setCopied] = useState(false);
+
   const [activeCategories, setActiveCategories] = useState<CategoryKey[]>([]);
-
-
 
   const fetchSafeBalance = async (safeAddr: string) => {
     if (!signer) return;
     try {
-      const contract = new ethers.Contract(USDC_E_ADDRESS, ERC20_ABI, signer.provider);
-      const balance = await contract.balanceOf(safeAddr);
-      const formatted = ethers.utils.formatUnits(balance, 6); 
-      setSafeBalance(formatted);
-      console.log(`safe balance (${safeAddr.slice(0,6)}): ${formatted} USDC.e`);
+      const polBalanceRaw = await signer.provider.getBalance(safeAddr);
+      const polBalance = ethers.utils.formatEther(polBalanceRaw);
+
+      const USDC_E_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+      const ERC20_ABI = [
+        "function balanceOf(address owner) view returns (uint256)",
+      ];
+      const usdcContract = new ethers.Contract(
+        USDC_E_ADDRESS,
+        ERC20_ABI,
+        signer.provider
+      );
+
+      const usdcBalanceRaw = await usdcContract.balanceOf(safeAddr);
+      const usdcBalance = ethers.utils.formatUnits(usdcBalanceRaw, 6);
+
+      setSafeBalance(usdcBalance);
     } catch (e) {
-      console.error("an unexpected error", e);
+      console.error("error", e);
     }
   };
 
-
-
   const toggleCategory = (cat: CategoryKey) => {
-    setActiveCategories(prev =>
-      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    setActiveCategories((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
     );
   };
-
   const isActive = (cat: CategoryKey) => activeCategories.includes(cat);
-
+  const handleCopy = () => {
+    if (safeAddress) {
+      navigator.clipboard.writeText(safeAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
   return (
     <div className="flex h-screen flex-col px-3 py-3 box-border gap-3 relative items-center">
       <Header />
@@ -96,7 +107,20 @@ export default function Home() {
                   alt="logo"
                   className="flex-shrink-0 object-contain"
                 />
-                <p className="text-[14px] text-zinc-700 cursor-pointer">{safeAddress}</p>
+                <div className="relative group flex items-center">
+                  <p
+                    className="text-[14px] text-zinc-700 cursor-pointer hover:text-sky-600 transition font-mono"
+                    onClick={handleCopy}
+                  >
+                    {safeAddress}
+                  </p>
+
+                  {copied && (
+                    <span className="absolute -top-8 right-0 text-[10px] bg-zinc-800 text-white px-2 py-1 rounded shadow-md animate-bounce">
+                      Copied!
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex gap-4 text-[14px] flex-1">
                 <p className="text-green-700">Profit today: {2 + 2}</p>
@@ -125,8 +149,18 @@ export default function Home() {
                 onClick={() => setSearch("")}
                 className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-white"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             )}
