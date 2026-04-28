@@ -37,9 +37,8 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ModalProvider>
-        <div id="modal-root" />
-
-        <AppKitProviderr>{children}</AppKitProviderr>
+          <div id="modal-root" />
+          <AppKitProviderr>{children}</AppKitProviderr>
         </ModalProvider>
       </body>
     </html>

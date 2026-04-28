@@ -1,121 +1,188 @@
 "use client";
-import { SafeFactory } from "@safe-global/safe-core-sdk";
-import EthersAdapter from "@safe-global/safe-ethers-lib";
+
+import Safe, { type Eip1193Provider } from "@safe-global/protocol-kit";
 import { useAppKit, useDisconnect } from "@reown/appkit/react";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { useConnectorClient } from "wagmi";
+import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
-import Safe from "@safe-global/protocol-kit";
+import { USDC_E_ADDRESS, ERC20_ABI } from "../share/main";
+import { deploySafeIfNeeded } from "../share/main";
 
-type WithdrawParams = {
-  provider: any;
-  ownerAddress: string;
-  safeAddress: string;
-};
 
-function useEthersSigner() {
-  const [signer, setSigner] = useState<ethers.Signer | null>(null);
+export async function checkContractDeployed(
+  signer: ethers.Signer,
+  addr: string
+) {
+  const provider = signer.provider!;
+  const network = await provider.getNetwork();
+  const code = await provider.getCode(addr);
 
-  useEffect(() => {
-    const init = async () => {
-      if (typeof window === "undefined") return;
-      const anyWindow = window as any;
+  const isDeployed = code !== "0x";
 
-      if (!anyWindow.ethereum) {
-        console.error("Нет window.ethereum");
-        return;
-      }
+  console.log("[CHECK] chainId:", network.chainId);
+  console.log("[CHECK] code length:", code.length);
+  console.log("[CHECK] isDeployed:", isDeployed);
 
-      const provider = new ethers.providers.Web3Provider(anyWindow.ethereum);
-      const net = await provider.getNetwork();
-      console.log(net.chainId);
-      await provider.send("eth_requestAccounts", []);
-      const signer = provider.getSigner();
-      setSigner(signer);
-    };
+  return { chainId: network.chainId, isDeployed };
+}
 
-    init().catch(console.error);
-  }, []);
+const POLYGON_CHAIN_ID_HEX = "0x89";
 
-  return signer;
+async function ensurePolygonNetwork(ethereum: any) {
+  const currentChainId = await ethereum.request({ method: "eth_chainId" });
+  if (currentChainId === POLYGON_CHAIN_ID_HEX) return;
+
+  try {
+    await ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: POLYGON_CHAIN_ID_HEX }],
+    });
+  } catch (switchError: any) {
+    if (switchError.code === 4902) {
+      await ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: POLYGON_CHAIN_ID_HEX,
+            chainName: "Polygon Mainnet",
+            rpcUrls: ["https://polygon-rpc.com/"],
+            nativeCurrency: {
+              name: "POL",
+              symbol: "POL",
+              decimals: 18,
+            },
+            blockExplorerUrls: ["https://polygonscan.com/"],
+          },
+        ],
+      });
+      await ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: POLYGON_CHAIN_ID_HEX }],
+      });
+    } else {
+      throw switchError;
+    }
+  }
+}
+
+export function useEthersSigner() {
+  const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+
+  return useMemo(() => {
+    if (!isConnected || !walletClient || !address) return null;
+
+    const provider = new ethers.providers.Web3Provider(walletClient as any);
+    return provider.getSigner(address);
+  }, [address, isConnected, walletClient]);
+}
+
+export async function withdrawAllUSDCFromSafe(
+  signer: ethers.Signer,
+  safeAddress: string
+) {
+  const ownerAddress = await signer.getAddress();
+  const provider = signer.provider as ethers.providers.Web3Provider;
+  if (!provider) throw new Error("No provider on signer");
+
+  const ext = provider.provider as any;
+  if (typeof ext.request !== "function") {
+    throw new Error("Underlying provider is not EIP-1193 compatible");
+  }
+  const eip1193 = ext as Eip1193Provider;
+  console.log(`сейф: `, safeAddress);
+  const code = await provider.getCode(safeAddress);
+  if (code === "0x") {
+    throw new Error("Safe is not deployed on this network");
+  }
+
+  const usdcContract = new ethers.Contract(USDC_E_ADDRESS, ERC20_ABI, signer);
+  const balanceRaw: ethers.BigNumber = await usdcContract.balanceOf(
+    safeAddress
+  );
+
+  if (balanceRaw.isZero()) {
+    throw new Error("Safe does not have USDC");
+  }
+
+  const transferData = usdcContract.interface.encodeFunctionData("transfer", [
+    ownerAddress,
+    balanceRaw,
+  ]);
+
+  const safeSdk = await Safe.init({
+    provider: eip1193,
+    signer: ownerAddress,
+    safeAddress,
+  });
+
+  const safeTx = await safeSdk.createTransaction({
+    transactions: [
+      {
+        to: USDC_E_ADDRESS,
+        value: "0",
+        data: transferData,
+      },
+    ],
+  });
+
+  const execTxResponse = await safeSdk.executeTransaction(safeTx);
+  console.log("[WITHDRAW] tx:", execTxResponse.hash);
+
+  return execTxResponse.hash;
 }
 
 export default function CustomConnect() {
   const [safeBalance, setSafeBalance] = useState<string>("0");
   const [usdcBalance, setUsdcBalance] = useState<string>("0.00");
-  const [authDone, setAuthDone] = useState(false);
-  const [safeAddress, setSafeAddress] = useState<any>();
+  const [safeAddress, setSafeAddress] = useState<string | null>(null);
 
   const signer = useEthersSigner();
+
   const { address, isConnected } = useAppKitAccount();
   const { open } = useAppKit();
   const { disconnect } = useDisconnect();
   const router = useRouter();
-  const withdrawAllUSDC = async ({
-    provider,
-    ownerAddress,
-    safeAddress,
-  }: WithdrawParams) => {
-    if (!provider || !ownerAddress || !safeAddress) {
-      alert("No provider / ownerAddress / safeAddress");
-      return;
-    }
 
-    try {
-      const web3Provider = new ethers.providers.Web3Provider(provider);
-      const signer = web3Provider.getSigner(ownerAddress);
+  useEffect(() => {
+    if (!signer || !address) return;
 
-      const signerAddr = await signer.getAddress();
-      console.log("Using signer:", signerAddr);
+    const initSafe = async () => {
+      const res = await fetch("/api/getSafeWallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      const data = await res.json();
+      let safeAddrFromDb = data.proxyAddress || data.safeAddress;
 
-      const USDC_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
-      const ERC20_ABI = [
-        "function balanceOf(address owner) view returns (uint256)",
-        "function transfer(address to, uint256 amount) returns (bool)",
-      ];
-
-      const usdcContract = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
-      const balanceRaw: ethers.BigNumber = await usdcContract.balanceOf(
-        safeAddress
-      );
-
-      if (balanceRaw.isZero()) {
-        alert("Safe does not have USDC");
-        return;
+      if (!safeAddrFromDb) {
+        const createRes = await fetch("/api/user/safe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ownerAddress: address }),
+        });
+        const createData = await createRes.json();
+        console.log(`${JSON.stringify(createData)} createadsa`);
+        safeAddrFromDb = createData.predictedSafeAddress;
       }
 
-      const transferData = usdcContract.interface.encodeFunctionData(
-        "transfer",
-        [ownerAddress, balanceRaw]
-      );
+      console.log("[INIT] safeAddrFromDb:", safeAddrFromDb);
+      console.log("type", typeof safeAddrFromDb);
 
-      const safeSdk = await Safe.init({
-        provider,
-        signer: ownerAddress,
-        safeAddress,
-      });
+      if (safeAddrFromDb) setSafeAddress(safeAddrFromDb);
+    };
 
-      const safeTransaction = await safeSdk.createTransaction({
-        transactions: [
-          {
-            to: USDC_ADDRESS,
-            value: "0",
-            data: transferData,
-          },
-        ],
-      });
+    initSafe().catch(console.error);
+  }, [signer, address]);
 
-      const execTxResponse = await safeSdk.executeTransaction(safeTransaction);
-
-      console.log("TX hash:", execTxResponse.hash);
-
-      alert("USDC from Safe was transfered!");
-    } catch (e: any) {
-      console.error("error Safe:", e);
+  useEffect(() => {
+    if (safeAddress && signer) {
+      fetchSafeBalance(safeAddress);
     }
-  };
+  }, [safeAddress, signer]);
 
   const fetchSafeBalance = async (safeAddr: string) => {
     if (!signer || !signer.provider) return;
@@ -132,13 +199,9 @@ export default function CustomConnect() {
       const polBalance = ethers.utils.formatEther(polBalanceRaw);
       console.log(`📡 [RESULT] POL для ${safeAddr}:`, polBalance);
 
-      const USDC_E_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
-      const ERC20_ABI = [
-        "function balanceOf(address owner) view returns (uint256)",
-      ];
       const usdcContract = new ethers.Contract(
         USDC_E_ADDRESS,
-        ERC20_ABI,
+        ["function balanceOf(address owner) view returns (uint256)"],
         signer.provider
       );
 
@@ -152,44 +215,13 @@ export default function CustomConnect() {
     }
   };
 
-  useEffect(() => {
-    if (!isConnected || !address || !signer || authDone) return;
-
-    const initAccount = async () => {
-      try {
-        const dbRes = await fetch("/api/getSafeWallet", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address }),
-        });
-
-        const dbData = await dbRes.json();
-        const safeAddrFromDb = dbData.proxyAddress || dbData.safeAddress;
-
-        if (safeAddrFromDb) {
-          setSafeAddress(safeAddrFromDb);
-          setAuthDone(true);
-          await fetchSafeBalance(safeAddrFromDb);
-        }
-      } catch (e) {
-        console.error("[INIT ERROR]:", e);
-      }
-    };
-
-    initAccount();
-  }, [isConnected, address, signer, authDone]);
-
-  useEffect(() => {
-    if (safeAddress && signer) {
-      fetchSafeBalance(safeAddress);
-    }
-  }, [safeAddress, signer]);
   const conv = Math.floor(Number(safeBalance));
+
   return (
     <div className="w-full flex flex-col items-center gap-4 justify-center p-4 max-w-120">
       {address && isConnected ? (
         <>
-          <div className="flex px-3 gap-4 border p-2 w-full flex-col rounded-xl bg-gray-50 shadow-sm font-mono w-max-100">
+          <div className="flex px-3 gap-4 border border-gray-200 p-2 w-full flex-col rounded-xl bg-gray-50 shadow-sm font-mono w-max-100">
             <ul className="flex items-center gap-8 justify-around w-full">
               <div className="flex w-full">
                 <li className="flex flex-col items-center justify-center w-1/2 ">
@@ -227,39 +259,45 @@ export default function CustomConnect() {
                       Scalp
                     </button>
                     <button
+                      disabled={!signer || !safeAddress}
                       onClick={async () => {
-                        if (
-                          typeof window === "undefined" ||
-                          !(window as any).ethereum
-                        ) {
-                          alert("Нет window.ethereum");
-                          return;
+                        try {
+                          if (!signer || !safeAddress) {
+                            alert("No signer / safeAddress");
+                            return;
+                          }
+
+                          if (
+                            typeof window !== "undefined" &&
+                            (window as any).ethereum
+                          ) {
+                            await ensurePolygonNetwork(
+                              (window as any).ethereum
+                            );
+                          }
+
+                          await deploySafeIfNeeded(signer, safeAddress);
+
+                          const txHash = await withdrawAllUSDCFromSafe(
+                            signer,
+                            safeAddress
+                          );
+                          alert("Withdraw tx sent: " + txHash);
+                        } catch (e: any) {
+                          console.error("[WITHDRAW ERROR]:", e);
+                          alert(e.message || "Withdraw error");
                         }
-
-                        const provider = (window as any).ethereum;
-
-                        await provider.request({
-                          method: "eth_requestAccounts",
-                        });
-
-                        await withdrawAllUSDC({
-                          provider,
-                          ownerAddress: address, 
-                          safeAddress, 
-                        });
                       }}
                       className="bg-sky-300/80 px-4 py-1.5 rounded-md text-sm hover:bg-sky-300 transition cursor-pointer"
                     >
-                      WITHDRAW
+                      Withdraw
                     </button>
-                    <button className="px-4 py-1.5 rounded-md text-sm hover:bg-red-200 transition cursor-pointer border border-red-700">
-                      Exit
-                    </button>
+                   
                     <button
                       onClick={() => router.push("/profile")}
                       className="bg-sky-300/80 px-4 py-1.5 rounded-md text-sm hover:bg-sky-300 transition cursor-pointer"
                     >
-                      profile
+                      Profile
                     </button>
                   </div>
                 </li>

@@ -28,15 +28,15 @@ export default function Header() {
           body: JSON.stringify({ ownerAddress: address }),
         });
 
-        const { proxyAddress } = await safeRes.json();
+        const proxyAddress = await safeRes.json();
+        console.log("safe address:", proxyAddress.safe_address);
 
-        setSafe(proxyAddress);
-        console.log("safe address:", proxyAddress);
+        setSafe(proxyAddress.safe_address);
       } catch {}
     };
     initAccount();
     setLoading(false);
-  });
+  }, [address, isConnected]);
   const handleDeposit = () => {
     openModal(<DepositContent address={safe as any} closeModal={closeModal} />);
   };

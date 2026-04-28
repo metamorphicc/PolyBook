@@ -8,12 +8,8 @@ const RPC_URL =
 
 export async function POST(request: Request) {
   try {
-    console.log();
     const body = await request.json();
     const { ownerAddress } = body;
-    console.log(
-      `owner adds;` + ownerAddress
-    );
 
     if (!ownerAddress) {
       return NextResponse.json(
@@ -22,18 +18,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const [checker] = await pool.query<RowDataPacket[]>(
+    const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT safe_address FROM users WHERE address = ?",
       [ownerAddress]
     );
 
-    if (checker && checker.length > 0) {
-      const existingSafeAddress = checker[0].safe_address;
-      console.log(existingSafeAddress)
-      return NextResponse.json({
-        ok: "ok",
-        proxyAddress: existingSafeAddress 
-      });
+    if (rows && rows.length > 0 && rows[0].safe_address) {
+      const predicted = rows[0].safe_address as string;
+      return NextResponse.json({ safe_address: predicted });
     }
 
     const safeSdk = await Safe.init({
@@ -48,21 +40,19 @@ export async function POST(request: Request) {
     });
 
     const predictedAddress = await safeSdk.getAddress();
+    console.log(predictedAddress, `<- сам адрес`);
+    await pool.query(
+      `
+      INSERT INTO users (address, safe_address)
+      VALUES (?, ?)
+      ON DUPLICATE KEY UPDATE safe_address = VALUES(safe_address)
+    `,
+      [ownerAddress, predictedAddress]
+    );
 
-    await fetch("http://localhost:3002/api/registerUser", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        address: ownerAddress,
-        safe_address: predictedAddress,
-      }),
-    }).then((res) => {
-      res.json();
-    });
-
-    return NextResponse.json({ proxyAddress: predictedAddress });
+    return NextResponse.json({ safe_address: predictedAddress });
   } catch (error: any) {
-    console.error("back error", error.message);
+    console.error("getOrCreateSafe error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
