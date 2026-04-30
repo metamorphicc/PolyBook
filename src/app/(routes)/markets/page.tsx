@@ -18,13 +18,16 @@ export default function Markets({
   activeCategories,
 }: MarketsProps) {
   const [loading, setLoading] = useState(false);
-  const pathname = usePathname();
   const [ress, setRess] = useState<any[]>([]);
+  const [limit, setLimit] = useState(20);
+  const pathname = usePathname();
+
   useEffect(() => {
     const parse = async () => {
       try {
         setLoading(true);
         const row = await fetch("/api/markets").then((res) => res.json());
+        console.log(`row: ` + row);
         setRess(row);
       } catch (e) {
         console.log("Error: " + e);
@@ -35,8 +38,25 @@ export default function Markets({
     parse();
   }, []);
 
+  useEffect(() => {
+    const handleScroll = () => {
+      const bottom =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 200;
+
+      if (bottom) {
+        setLimit((prev) => prev + 20);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   const filteredMarkets = useMemo(() => {
-    if (!searchQuery && (activeCategories?.length === 0 || 0)) return ress;
+    if (!searchQuery && (!activeCategories || activeCategories.length === 0)) {
+      return ress;
+    }
 
     const q = searchQuery?.toLowerCase() || "";
 
@@ -49,7 +69,7 @@ export default function Markets({
         }
       }
 
-      if (activeCategories?.length || 0 > 0) {
+      if (activeCategories && activeCategories.length > 0) {
         const category =
           (market.category as string | undefined)?.toLowerCase() ??
           market.tags?.[0]?.label?.toLowerCase() ??
@@ -82,6 +102,11 @@ export default function Markets({
     });
   }, [searchQuery, activeCategories, ress]);
 
+  const visibleMarkets = useMemo(
+    () => filteredMarkets.slice(0, limit),
+    [filteredMarkets, limit]
+  );
+
   if (loading) return <Loading />;
 
   return (
@@ -90,10 +115,10 @@ export default function Markets({
 
       <div className="w-[90vw] p-4 rounded-md shadow-lg">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
-          {filteredMarkets.map((market: any) => {
+          {visibleMarkets.map((market: any) => {
             const liquidity = Math.trunc(market.liquidity);
-
             const data = new Date(market.endDate);
+
             return (
               <div
                 key={market.id}
@@ -121,33 +146,7 @@ export default function Markets({
                 </div>
 
                 <div className="flex flex-col gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x justify-center">
-                  <div className="flex flex-col gap-2 overflow-y-auto pr-1  items-center custom-scrollbar">
-                    {/* {[
-                      { name: "Alexandria O...", yes: "9¢", no: "92¢" },
-                      { name: "Kamala Harris", yes: "6¢", no: "94¢" },
-                      { name: "Jon Ossoff", yes: "5¢", no: "95¢" },
-                      { name: "Gavin Newsom", yes: "4¢", no: "96¢" },
-                      { name: "Pete Buttigieg", yes: "3¢", no: "97¢" },
-                    ].map((item, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between py-1 group"
-                      >
-                        <span className="text-sm text-gray-300 truncate w-24 group-hover:text-white transition-colors">
-                          {item.name}
-                        </span>
-
-                        <div className="flex gap-2">
-                          <button className="bg-green-500/10 hover:bg-green-500/20 text-green-500 text-xs font-bold py-1.5 px-3 rounded-full border border-green-500/20 transition-all">
-                            Yes {item.yes}
-                          </button>
-                          <button className="bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold py-1.5 px-3 rounded-full border border-red-500/20 transition-all">
-                            No {item.no}
-                          </button>
-                        </div>
-                      </div>
-                    ))} */}
-                  </div>
+                  <div className="flex flex-col gap-2 overflow-y-auto pr-1 items-center custom-scrollbar"></div>
                 </div>
 
                 <div className="flex justify-between items-end h-full">

@@ -189,7 +189,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="flex-1 w-full flex justify-center">
+      <div className=" ">
         <Markets searchQuery={search} activeCategories={activeCategories} />
       </div>
     </div>
