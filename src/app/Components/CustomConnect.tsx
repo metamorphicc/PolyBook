@@ -252,12 +252,7 @@ export default function CustomConnect() {
               <div>
                 <li>
                   <div className="gap-3 flex">
-                    <button
-                      onClick={() => router.push("/scalp")}
-                      className="bg-sky-300/80 px-4 py-1.5 rounded-md text-sm hover:bg-sky-300 transition cursor-pointer"
-                    >
-                      Scalp
-                    </button>
+                    
                     <button
                       disabled={!signer || !safeAddress}
                       onClick={async () => {
@@ -298,6 +293,12 @@ export default function CustomConnect() {
                       className="bg-sky-300/80 px-4 py-1.5 rounded-md text-sm hover:bg-sky-300 transition cursor-pointer"
                     >
                       Profile
+                    </button>
+                    <button
+                      onClick={() => disconnect()}
+                      className="px-4 py-1.5 rounded-md text-sm hover:bg-red-300 transition cursor-pointer border border-red-400"
+                    >
+                      Logout
                     </button>
                   </div>
                 </li>

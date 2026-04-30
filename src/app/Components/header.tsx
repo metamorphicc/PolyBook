@@ -82,8 +82,11 @@ export default function Header() {
               </button>
             </li>
             <li>
-              <button className="border rounded-md px-4 py-1.5 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer">
-                Traders
+              <button
+                onClick={() => router.push("/scalp")}
+                className="border rounded-md px-4 py-1.5 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer"
+              >
+                Scalp
               </button>
             </li>
             <li>
