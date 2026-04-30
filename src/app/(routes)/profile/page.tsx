@@ -11,6 +11,7 @@ export default function Profile() {
   const { address, isConnected } = useAppKitAccount();
   const [trades, setTrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [safe, setSafe] = useState<any>();
   const router = useRouter();
   const [bio, setBio] = useState<string>("");
   const [editing, setEditing] = useState<boolean>(false);
@@ -50,8 +51,8 @@ export default function Profile() {
           body: JSON.stringify({ address }),
         });
         const dbData = await dbRes.json();
-        const safeAddr = dbData.proxyAddress;
-
+        const safeAddr = dbData.safeAddress;
+        setSafe(safeAddr)
         if (safeAddr) {
           const history = await fetchHistory(safeAddr);
           setTrades(history);
@@ -209,7 +210,7 @@ export default function Profile() {
                   <div className="h-full flex flex-col w-full items-center justify-center gap-1">
                     <p className="flex justify-center font-medium">W/R: 90% </p>
                     <p className="flex justify-center text-gray-500 text-sm text-center px-2 font-mono">
-                      Safe: {address?.slice(0, 6)}...{address?.slice(-4)}
+                      Safe: {safe?.slice(0, 5)}...{safe?.slice(38, 43)}
                     </p>
                   </div>
                 </div>

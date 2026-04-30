@@ -179,10 +179,12 @@ export default function CustomConnect() {
   }, [signer, address]);
 
   useEffect(() => {
-    if (safeAddress && signer) {
-      fetchSafeBalance(safeAddress);
-    }
-  }, [safeAddress, signer]);
+  console.log("[EFFECT] safeAddress:", safeAddress, "signer:", !!signer);
+  if (safeAddress && signer) {
+    console.log("[EFFECT] calling fetchSafeBalance");
+    fetchSafeBalance(safeAddress);
+  }
+}, [safeAddress, signer]);
 
   const fetchSafeBalance = async (safeAddr: string) => {
     if (!signer || !signer.provider) return;
@@ -193,11 +195,13 @@ export default function CustomConnect() {
 
       if (chainId !== 137) {
         console.warn("Change your network: POL");
+        return;
       }
 
       const polBalanceRaw = await signer.provider.getBalance(safeAddr);
       const polBalance = ethers.utils.formatEther(polBalanceRaw);
       console.log(`📡 [RESULT] POL для ${safeAddr}:`, polBalance);
+      console.log("[RAW POL BALANCE]:", polBalanceRaw.toString());
 
       const usdcContract = new ethers.Contract(
         USDC_E_ADDRESS,
@@ -215,7 +219,7 @@ export default function CustomConnect() {
     }
   };
 
-  const conv = Math.floor(Number(safeBalance));
+  const conv = Number(safeBalance)
 
   return (
     <div className="w-full flex flex-col items-center gap-4 justify-center p-4 max-w-120">
