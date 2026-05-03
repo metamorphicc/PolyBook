@@ -2,17 +2,15 @@
 
 import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createAppKit } from "@reown/appkit/react";
+import { createAppKit } from "@reown/appkit/react"; 
 import {
   mainnet,
-  arbitrum,
-  type AppKitNetwork,
-  bsc,
   polygon,
+  type AppKitNetwork,
 } from "@reown/appkit/networks";
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
-import "dotenv/config";
-import { ReownAuthentication } from "@reown/appkit-siwx";
+import { DefaultSIWX } from "@reown/appkit-siwx";
+
 const queryClient = new QueryClient();
 
 const networks: [AppKitNetwork, ...AppKitNetwork[]] = [mainnet, polygon];
@@ -23,6 +21,7 @@ const metadata = {
   name: "Polybook",
   description: "Polybook dApp",
   url: "http://localhost:3002",
+  icons: ["http://localhost:3002/icon.png"],
 };
 
 export const wagmiAdapter = new WagmiAdapter({
@@ -31,20 +30,25 @@ export const wagmiAdapter = new WagmiAdapter({
   ssr: true,
 });
 
+const siwx = new DefaultSIWX();
+
 createAppKit({
   adapters: [wagmiAdapter],
   networks,
   projectId,
+  metadata,
   features: {
     analytics: true,
   },
-  siwx: new ReownAuthentication(),
+  siwx,
 });
 
 export function AppKitProviderr({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiAdapter.wagmiConfig}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
     </WagmiProvider>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 import { PrivyProvider } from "@privy-io/react-auth";
+import { DefaultSIWX } from "@reown/appkit-siwx";
 
 export default function PrivyProviderr({ children }: { children: any }) {
   return (

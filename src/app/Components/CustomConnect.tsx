@@ -140,9 +140,9 @@ export default function CustomConnect() {
   const [safeAddress, setSafeAddress] = useState<string | null>(null);
 
   const signer = useEthersSigner();
+  const { open } = useAppKit();
 
   const { address, isConnected } = useAppKitAccount();
-  const { open } = useAppKit();
   const { disconnect } = useDisconnect();
   const router = useRouter();
 

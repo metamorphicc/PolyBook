@@ -22,11 +22,10 @@ export default function Scalp() {
             <div className="flex items-center p-6  w-screen shadow-lg justify-center flex-col gap-6">
               <div className="flex items-center flex-col text-black gap-2">
                 <p className="text-[25px] font-semibold">
-                  Lorem ipsum dolor sit amet consectetur adipisicing elit.
-                  Accusantium, rerum?
+                  You're currently switching to scalp mode
                 </p>
                 <span className="">
-                 Lorem ipsum dolor sit amet consectetur adipisicing elit. Ut impedit illum maiores voluptates, deserunt a.
+                 You sure you want to proceed? 
                 </span>
               </div>
               <div className=" mb-20 flex gap-6 flex justify-center ">
