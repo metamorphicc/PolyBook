@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@polymarket/builder-relayer-client": "^0.0.8",
+    "@polymarket/builder-signing-sdk": "^1.0.0",
     "@polymarket/clob-client": "^5.8.0",
     "@privy-io/node": "^0.9.0",
     "@privy-io/react-auth": "^1.28.2",
@@ -34,7 +35,7 @@
     "express": "^5.2.1",
     "hardhat": "^3.1.9",
     "jsonwebtoken": "^9.0.3",
-    "lightweight-charts": "^5.2.0",
+    "lightweight-charts": "^4.2.3",
     "lit": "3.3.0",
     "mysql2": "^3.20.0",
     "next": "^16.2.4",

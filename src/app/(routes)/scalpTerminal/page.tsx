@@ -3,74 +3,25 @@
 import DropdownMenu from "@/app/Components/DropDown";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState, useMemo, useEffect } from "react";
-import CoinChart from "./CoinSearchModal";
+import { useState, useMemo, useEffect, useRef } from "react";
 import PriceChart from "@/app/Components/priceChart";
+
 
 type DraggableChartWindowProps = {
   symbol: string;
   onClose: () => void;
 };
 
-function DraggableChartWindow({ symbol, onClose }: DraggableChartWindowProps) {
-  const [pos, setPos] = useState({ x: 40, y: 80 });
-  const [dragging, setDragging] = useState(false);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setDragging(true);
-    setOffset({
-      x: e.clientX - pos.x,
-      y: e.clientY - pos.y,
-    });
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!dragging) return;
-    setPos({
-      x: e.clientX - offset.x,
-      y: e.clientY - offset.y,
-    });
-  };
-
-  const handleMouseUp = () => setDragging(false);
-
-  useEffect(() => {
-    if (!dragging) return;
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [dragging, offset]);
-
-  return (
-    <div
-      className="fixed z-40 w-80 h-72 bg-white border border-zinc-300 rounded-lg shadow-xl overflow-hidden"
-      style={{ left: pos.x, top: pos.y }}
-    >
-      <div
-        className="h-8 bg-zinc-800 text-white text-xs flex items-center justify-between px-3 cursor-move select-none"
-        onMouseDown={handleMouseDown}
-      >
-        <span>{symbol}</span>
-        <button onClick={onClose} className="text-zinc-300 hover:text-white">
-          ✕
-        </button>
-      </div>
-
-      <div className="w-full h-[calc(100%-2rem)]">
-        <CoinChart symbol={symbol} />
-      </div>
-    </div>
-  );
-}
+type ChartWindow = {
+  id: number;
+  symbol: string;
+};
 
 type CoinSearchModalProps = {
   onClose: () => void;
   onSelectCoin: (symbol: string) => void;
 };
+
 
 const COINS = ["bitcoin", "eth", "sol", "xrp"];
 
@@ -80,6 +31,108 @@ const COIN_SYMBOLS: Record<string, string> = {
   sol: "BINANCE:SOLUSDT",
   xrp: "BINANCE:XRPUSDT",
 };
+
+
+function DraggableChartWindow({ symbol, onClose }: DraggableChartWindowProps) {
+  const [pos, setPos] = useState({ x: 40, y: 80 });
+  const [size, setSize] = useState({ width: 480, height: 320 });
+
+  const [dragging, setDragging] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  const [resizing, setResizing] = useState(false);
+  const resizeStart = useRef({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
+
+  const handleMouseDownHeader = (e: React.MouseEvent) => {
+    setDragging(true);
+    setOffset({
+      x: e.clientX - pos.x,
+      y: e.clientY - pos.y,
+    });
+  };
+
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setResizing(true);
+    resizeStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: size.width,
+      height: size.height,
+    };
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (dragging) {
+      setPos({
+        x: e.clientX - offset.x,
+        y: e.clientY - offset.y,
+      });
+    } else if (resizing) {
+      const dx = e.clientX - resizeStart.current.x;
+      const dy = e.clientY - resizeStart.current.y;
+
+      setSize({
+        width: Math.max(320, resizeStart.current.width + dx),
+        height: Math.max(240, resizeStart.current.height + dy),
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setDragging(false);
+    setResizing(false);
+  };
+
+  useEffect(() => {
+    if (!dragging && !resizing) return;
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [dragging, resizing, offset]);
+
+  return (
+    <div
+      className="fixed z-40 bg-white border border-zinc-300 rounded-lg shadow-xl overflow-hidden"
+      style={{
+        left: pos.x,
+        top: pos.y,
+        width: size.width,
+        height: size.height,
+      }}
+    >
+      <div
+        className="h-8 bg-zinc-800 text-white text-xs flex items-center justify-between px-3 cursor-move select-none"
+        onMouseDown={handleMouseDownHeader}
+      >
+        <span>{symbol}</span>
+        <button onClick={onClose} className="text-zinc-300 hover:text-white">
+          ✕
+        </button>
+      </div>
+
+      <div className="w-full h-[calc(100%-2rem)] bg-zinc-900">
+        <PriceChart symbol={symbol} />
+      </div>
+
+      <div
+        className="absolute bottom-1 right-1 w-3 h-3 cursor-se-resize bg-zinc-500/70 rounded-sm"
+        onMouseDown={handleResizeMouseDown}
+      />
+    </div>
+  );
+}
+
 
 function CoinSearchModal({ onClose, onSelectCoin }: CoinSearchModalProps) {
   const [query, setQuery] = useState("");
@@ -91,10 +144,8 @@ function CoinSearchModal({ onClose, onSelectCoin }: CoinSearchModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* фон */}
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-      {/* окно */}
       <div className="relative z-10 w-full max-w-sm rounded-xl bg-zinc-900 p-4 shadow-xl border border-zinc-700">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-white">Select a coin</h2>
@@ -121,7 +172,7 @@ function CoinSearchModal({ onClose, onSelectCoin }: CoinSearchModalProps) {
               className="w-full text-left px-3 py-2 rounded-md text-sm text-zinc-100 hover:bg-zinc-800"
               onClick={() => {
                 const symbol = COIN_SYMBOLS[coin];
-                onSelectCoin(symbol); 
+                onSelectCoin(symbol);
               }}
             >
               {coin.toUpperCase()}
@@ -142,7 +193,13 @@ export default function ScalpTerminal() {
   const router = useRouter();
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [chartWindows, setChartWindows] = useState<ChartWindow[]>([]);
+  const [nextId, setNextId] = useState(1);
+
+  const openChartForSymbol = (symbol: string) => {
+    setChartWindows((prev) => [...prev, { id: nextId, symbol }]);
+    setNextId((id) => id + 1);
+  };
 
   return (
     <div className="relative w-full">
@@ -152,13 +209,14 @@ export default function ScalpTerminal() {
         </div>
 
         <div className="flex items-center justify-center h-full flex-col gap-5">
-          <div className="flex items-center flex-col justify-center">
-            <p className="font-semibold text-zinc-700">The panel is empty</p>
-            <span className="text-zinc-700">
-              Select a chart or orderbook to start trading
-            </span>
-          </div>
-
+          {chartWindows.length === 0 && (
+            <div className="flex items-center flex-col justify-center">
+              <p className="font-semibold text-zinc-700">The panel is empty</p>
+              <span className="text-zinc-700">
+                Select a chart or orderbook to start trading
+              </span>
+            </div>
+          )}
           <div className="flex gap-5">
             <div className="border border-zinc-700 hover:scale-103 transition inline-flex">
               <button className="p-0" onClick={() => setIsSearchOpen(true)}>
@@ -191,17 +249,21 @@ export default function ScalpTerminal() {
         <CoinSearchModal
           onClose={() => setIsSearchOpen(false)}
           onSelectCoin={(symbol) => {
-            setSelectedSymbol(symbol);
+            openChartForSymbol(symbol);
             setIsSearchOpen(false);
           }}
         />
       )}
 
-      {selectedSymbol && (
-        <div className="w-full max-w-3xl h-[500px] mt-4 border border-zinc-700 rounded-lg overflow-hidden bg-zinc-900">
-          <PriceChart symbol={selectedSymbol} />
-        </div>
-      )}
+      {chartWindows.map((w) => (
+        <DraggableChartWindow
+          key={w.id}
+          symbol={w.symbol}
+          onClose={() =>
+            setChartWindows((prev) => prev.filter((cw) => cw.id !== w.id))
+          }
+        />
+      ))}
     </div>
   );
 }

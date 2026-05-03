@@ -98,20 +98,6 @@ export default function ScalpTerminal2() {
     };
   }, [market]);
 
-  // function placeOrder(side: Side, price: number) {
-  //   setOrders((prev) => [
-  //     {
-  //       id: crypto.randomUUID(),
-  //       side,
-  //       price,
-  //     },
-  //     ...prev,
-  //   ]);
-  // }
-
-  // function hasOrder(side: Side, price: number) {
-  //   return orders.some((o) => o.side === side && o.price === price);
-  // }
 
   if (loading || !market) {
     return (

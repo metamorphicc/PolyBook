@@ -9,7 +9,14 @@ import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
 import { USDC_E_ADDRESS, ERC20_ABI } from "../share/main";
 import { deploySafeIfNeeded } from "../share/main";
+import {
+  RelayClient,
+  RelayerTransactionState,
+  RelayerTxType,
+} from "@polymarket/builder-relayer-client";
 
+const RELAYER_URL = "https://relayer-v2.polymarket.com";
+const POLYGON_CHAIN_ID = 137;
 
 export async function checkContractDeployed(
   signer: ethers.Signer,
@@ -71,11 +78,11 @@ export function useEthersSigner() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
 
-  return useMemo(() => {
+  return useMemo<ethers.providers.JsonRpcSigner | null>(() => {
     if (!isConnected || !walletClient || !address) return null;
 
     const provider = new ethers.providers.Web3Provider(walletClient as any);
-    return provider.getSigner(address);
+    return provider.getSigner(address) as ethers.providers.JsonRpcSigner;
   }, [address, isConnected, walletClient]);
 }
 
@@ -134,6 +141,38 @@ export async function withdrawAllUSDCFromSafe(
   return execTxResponse.hash;
 }
 
+export async function deploySafeWithRelayer(
+  signer: ethers.providers.JsonRpcSigner
+) {
+  const relayClient = new RelayClient(
+    RELAYER_URL,
+    POLYGON_CHAIN_ID,
+    signer,
+    undefined,
+    RelayerTxType.SAFE
+  );
+
+  const resp = await relayClient.deploy();
+
+  const result = await relayClient.pollUntilState(
+    resp.transactionID,
+    [
+      RelayerTransactionState.STATE_MINED,
+      RelayerTransactionState.STATE_CONFIRMED,
+      RelayerTransactionState.STATE_FAILED,
+    ],
+    RelayerTransactionState.STATE_FAILED,
+    60,
+    3000
+  );
+
+  if (!result || result.state === RelayerTransactionState.STATE_FAILED) {
+    throw new Error("Safe deployment failed");
+  }
+
+  return result.proxyAddress as string;
+}
+
 export default function CustomConnect() {
   const [safeBalance, setSafeBalance] = useState<string>("0");
   const [usdcBalance, setUsdcBalance] = useState<string>("0.00");
@@ -146,45 +185,82 @@ export default function CustomConnect() {
   const { disconnect } = useDisconnect();
   const router = useRouter();
 
+  async function handleRegisterSafe() {
+    try {
+      if (!signer || !address) {
+        console.error("No signer or address");
+        return;
+      }
+
+      const deployedSafeAddress = await deploySafeWithRelayer(signer);
+      console.log("Deployed safe:", deployedSafeAddress);
+
+      const res = await fetch("/api/user/safe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerAddress: address,
+          safeAddress: deployedSafeAddress,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        console.error("Failed to save safe:", data);
+        throw new Error(data.error ?? "Failed to save safe");
+      }
+
+      setSafeAddress(deployedSafeAddress);
+    } catch (e) {
+      console.error("[handleRegisterSafe error]:", e);
+    }
+  }
+
   useEffect(() => {
     if (!signer || !address) return;
 
     const initSafe = async () => {
-      const res = await fetch("/api/getSafeWallet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address }),
-      });
-      const data = await res.json();
-      let safeAddrFromDb = data.proxyAddress || data.safeAddress;
-
-      if (!safeAddrFromDb) {
-        const createRes = await fetch("/api/user/safe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ownerAddress: address }),
-        });
-        const createData = await createRes.json();
-        console.log(`${JSON.stringify(createData)} createadsa`);
-        safeAddrFromDb = createData.predictedSafeAddress;
+      try {
+        const res = await fetch(`/api/user/safe?address=${address}`);
+  
+        if (!res.ok) {
+          console.error("GET /api/user/safe failed:", res.status);
+        }
+  
+        let safeAddrFromDb: string | null = null;
+  
+        try {
+          const text = await res.text(); 
+          if (text) {
+            const data = JSON.parse(text);
+            safeAddrFromDb = (data.safeAddress as string) ?? null;
+          }
+        } catch (e) {
+          console.error("Failed to parse /api/user/safe JSON:", e);
+        }
+  
+        if (!safeAddrFromDb) {
+          await handleRegisterSafe();
+          return;
+        }
+  
+        console.log("[INIT] safeAddrFromDb:", safeAddrFromDb);
+        setSafeAddress(safeAddrFromDb);
+      } catch (e) {
+        console.error("[initSafe error]:", e);
       }
-
-      console.log("[INIT] safeAddrFromDb:", safeAddrFromDb);
-      console.log("type", typeof safeAddrFromDb);
-
-      if (safeAddrFromDb) setSafeAddress(safeAddrFromDb);
     };
 
     initSafe().catch(console.error);
   }, [signer, address]);
 
   useEffect(() => {
-  console.log("[EFFECT] safeAddress:", safeAddress, "signer:", !!signer);
-  if (safeAddress && signer) {
-    console.log("[EFFECT] calling fetchSafeBalance");
-    fetchSafeBalance(safeAddress);
-  }
-}, [safeAddress, signer]);
+    console.log("[EFFECT] safeAddress:", safeAddress, "signer:", !!signer);
+    if (safeAddress && signer) {
+      console.log("[EFFECT] calling fetchSafeBalance");
+      fetchSafeBalance(safeAddress);
+    }
+  }, [safeAddress, signer]);
 
   const fetchSafeBalance = async (safeAddr: string) => {
     if (!signer || !signer.provider) return;
@@ -219,7 +295,7 @@ export default function CustomConnect() {
     }
   };
 
-  const conv = Number(safeBalance)
+  const conv = Number(safeBalance);
 
   return (
     <div className="w-full flex flex-col items-center gap-4 justify-center p-4 max-w-120">
