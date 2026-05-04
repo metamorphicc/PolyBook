@@ -7,17 +7,21 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
-import { USDC_E_ADDRESS, ERC20_ABI } from "../share/main";
-import { deploySafeIfNeeded } from "../share/main";
+import { USDC_E_ADDRESS, ERC20_ABI, deploySafeIfNeeded } from "../share/main";
 import {
   RelayClient,
   RelayerTransactionState,
   RelayerTxType,
 } from "@polymarket/builder-relayer-client";
+import {
+  BuilderConfig,
+  BuilderApiKeyCreds,
+} from "@polymarket/builder-signing-sdk";
 
 const RELAYER_URL = "https://relayer-v2.polymarket.com";
 const POLYGON_CHAIN_ID = 137;
-
+const POLYGON_CHAIN_ID_HEX = "0x89";
+const PUSD_ADDRESS = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
 export async function checkContractDeployed(
   signer: ethers.Signer,
   addr: string
@@ -34,8 +38,6 @@ export async function checkContractDeployed(
 
   return { chainId: network.chainId, isDeployed };
 }
-
-const POLYGON_CHAIN_ID_HEX = "0x89";
 
 async function ensurePolygonNetwork(ethereum: any) {
   const currentChainId = await ethereum.request({ method: "eth_chainId" });
@@ -99,6 +101,7 @@ export async function withdrawAllUSDCFromSafe(
     throw new Error("Underlying provider is not EIP-1193 compatible");
   }
   const eip1193 = ext as Eip1193Provider;
+
   console.log(`сейф: `, safeAddress);
   const code = await provider.getCode(safeAddress);
   if (code === "0x") {
@@ -141,14 +144,50 @@ export async function withdrawAllUSDCFromSafe(
   return execTxResponse.hash;
 }
 
+async function getBuilderHeaders(
+  method: string,
+  path: string,
+  body: string
+): Promise<Record<string, string>> {
+  const res = await fetch("/api/polymarket-builder-sign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ method, path, body }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("[builder-sign] error:", res.status, text);
+    throw new Error("Failed to sign builder request");
+  }
+
+  const data = await res.json();
+  return {
+    POLY_BUILDER_SIGNATURE: data.POLY_BUILDER_SIGNATURE,
+    POLY_BUILDER_TIMESTAMP: data.POLY_BUILDER_TIMESTAMP,
+    POLY_BUILDER_API_KEY: data.POLY_BUILDER_API_KEY,
+    POLY_BUILDER_PASSPHRASE: data.POLY_BUILDER_PASSPHRASE,
+  };
+}
+
 export async function deploySafeWithRelayer(
   signer: ethers.providers.JsonRpcSigner
 ) {
+  const builderCreds: BuilderApiKeyCreds = {
+    key: process.env.NEXT_PUBLIC_POLY_BUILDER_API_KEY!,
+    secret: process.env.NEXT_PUBLIC_POLY_BUILDER_SECRET!,
+    passphrase: process.env.NEXT_PUBLIC_POLY_BUILDER_PASSPHRASE!,
+  };
+
+  const builderConfig = new BuilderConfig({
+    localBuilderCreds: builderCreds,
+  });
+
   const relayClient = new RelayClient(
     RELAYER_URL,
     POLYGON_CHAIN_ID,
     signer,
-    undefined,
+    builderConfig,
     RelayerTxType.SAFE
   );
 
@@ -222,15 +261,15 @@ export default function CustomConnect() {
     const initSafe = async () => {
       try {
         const res = await fetch(`/api/user/safe?address=${address}`);
-  
+
         if (!res.ok) {
           console.error("GET /api/user/safe failed:", res.status);
         }
-  
+
         let safeAddrFromDb: string | null = null;
-  
+
         try {
-          const text = await res.text(); 
+          const text = await res.text();
           if (text) {
             const data = JSON.parse(text);
             safeAddrFromDb = (data.safeAddress as string) ?? null;
@@ -238,12 +277,12 @@ export default function CustomConnect() {
         } catch (e) {
           console.error("Failed to parse /api/user/safe JSON:", e);
         }
-  
+
         if (!safeAddrFromDb) {
           await handleRegisterSafe();
           return;
         }
-  
+
         console.log("[INIT] safeAddrFromDb:", safeAddrFromDb);
         setSafeAddress(safeAddrFromDb);
       } catch (e) {
@@ -256,40 +295,47 @@ export default function CustomConnect() {
 
   useEffect(() => {
     console.log("[EFFECT] safeAddress:", safeAddress, "signer:", !!signer);
-    if (safeAddress && signer) {
-      console.log("[EFFECT] calling fetchSafeBalance");
-      fetchSafeBalance(safeAddress);
-    }
+    if (!safeAddress || !signer) return;
+
+    console.log("[EFFECT] calling fetchSafeBalance for", safeAddress);
+    fetchSafeBalance(safeAddress).catch((e) =>
+      console.error("[fetchSafeBalance error]:", e)
+    );
   }, [safeAddress, signer]);
 
   const fetchSafeBalance = async (safeAddr: string) => {
-    if (!signer || !signer.provider) return;
+    if (!signer || !signer.provider) {
+      console.warn("[BALANCE] No signer or provider");
+      return;
+    }
 
     try {
-      const { chainId } = await signer.provider.getNetwork();
+      const provider = signer.provider;
+      const { chainId } = await provider.getNetwork();
       console.log("🌐 [NETWORK CHECK] Chain ID:", chainId);
 
-      if (chainId !== 137) {
-        console.warn("Change your network: POL");
+      if (chainId !== POLYGON_CHAIN_ID) {
+        console.warn("[BALANCE] Wrong network, expected Polygon (137)");
         return;
       }
 
-      const polBalanceRaw = await signer.provider.getBalance(safeAddr);
+      const polBalanceRaw = await provider.getBalance(safeAddr);
       const polBalance = ethers.utils.formatEther(polBalanceRaw);
       console.log(`📡 [RESULT] POL для ${safeAddr}:`, polBalance);
-      console.log("[RAW POL BALANCE]:", polBalanceRaw.toString());
 
-      const usdcContract = new ethers.Contract(
-        USDC_E_ADDRESS,
+      const pusdContract = new ethers.Contract(
+        PUSD_ADDRESS,
         ["function balanceOf(address owner) view returns (uint256)"],
         signer.provider
       );
 
-      const usdcBalanceRaw = await usdcContract.balanceOf(safeAddr);
-      const usdcBalanceValue = ethers.utils.formatUnits(usdcBalanceRaw, 6);
+      const pusdBalanceRaw = await pusdContract.balanceOf(safeAddr);
+      const pusdBalanceValue = ethers.utils.formatUnits(pusdBalanceRaw, 6);
+
+      console.log(`📡 [RESULT] USDC.e для ${safeAddr}:`, pusdBalanceValue);
 
       setSafeBalance(parseFloat(polBalance).toFixed(4));
-      setUsdcBalance(parseFloat(usdcBalanceValue).toFixed(2));
+      setUsdcBalance(parseFloat(pusdBalanceValue).toFixed(2));
     } catch (e) {
       console.error("[FETCH ERROR]:", e);
     }
@@ -316,7 +362,7 @@ export default function CustomConnect() {
                 </li>
                 <li className="w-1/2 flex flex-col items-center ">
                   <div className="flex flex-col items-center border-l pl-4 border-gray-200 w-full justify-center">
-                    <span className="text-[10px] text-gray-400">USDC.e</span>
+                    <span className="text-[10px] text-gray-400">pUsd</span>
                     <span
                       className={
                         parseFloat(usdcBalance) > 0
@@ -332,7 +378,6 @@ export default function CustomConnect() {
               <div>
                 <li>
                   <div className="gap-3 flex">
-                    
                     <button
                       disabled={!signer || !safeAddress}
                       onClick={async () => {
@@ -367,7 +412,7 @@ export default function CustomConnect() {
                     >
                       Withdraw
                     </button>
-                   
+
                     <button
                       onClick={() => router.push("/profile")}
                       className="bg-sky-300/80 px-4 py-1.5 rounded-md text-sm hover:bg-sky-300 transition cursor-pointer"

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
-import { pool } from "../../db";        
+import { pool } from "../../db";
 import { RowDataPacket } from "mysql2";
+import {
+  BuilderConfig,
+  BuilderApiKeyCreds,
+} from "@polymarket/builder-signing-sdk";
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +17,6 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
-
     const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT safe_address FROM users WHERE address = ?",
       [address]
@@ -23,7 +26,6 @@ export async function GET(request: Request) {
       rows && rows.length > 0 && rows[0].safe_address
         ? (rows[0].safe_address as string)
         : null;
-
     return NextResponse.json({ safeAddress });
   } catch (error: any) {
     console.error("GET /api/user/safe error:", error);

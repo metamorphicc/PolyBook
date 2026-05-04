@@ -11,11 +11,12 @@
   },
   "overrides": {
     "axios": "^1.7.4",
-    "elliptic": "^6.5.7"
+    "elliptic": "^6.5.7",
+    "@polymarket/builder-signing-sdk": "1.0.0"
   },
   "dependencies": {
-    "@polymarket/builder-relayer-client": "^0.0.8",
-    "@polymarket/builder-signing-sdk": "^1.0.0",
+    "@polymarket/builder-relayer-client": "0.0.9",
+    "@polymarket/builder-signing-sdk": "1.0.0",
     "@polymarket/clob-client": "^5.8.0",
     "@privy-io/node": "^0.9.0",
     "@privy-io/react-auth": "^1.28.2",
@@ -31,7 +32,7 @@
     "clsx": "^2.1.1",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
-    "ethers": "^5.7.2",
+    "ethers": "^5.8.0",
     "express": "^5.2.1",
     "hardhat": "^3.1.9",
     "jsonwebtoken": "^9.0.3",

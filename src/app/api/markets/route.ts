@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
     })
 
     const data = await res.json()
-    console.log(`data from api: `+data)
     if (!Array.isArray(data)) return NextResponse.json([])
 
     return NextResponse.json(data)

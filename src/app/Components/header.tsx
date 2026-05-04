@@ -22,21 +22,17 @@ export default function Header() {
     const initAccount = async () => {
       setLoading(true);
       try {
-        const safeRes = await fetch("/api/user/safe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ownerAddress: address }),
-        });
+        const res = await fetch(`/api/user/safe?address=${address}`);
 
-        const proxyAddress = await safeRes.json();
-        console.log("safe address:", proxyAddress.safe_address);
-
-        setSafe(proxyAddress.safe_address);
+        const data = await res.json();
+        let safeAddrFromDb = data.safeAddress ;
+        setSafe(safeAddrFromDb);
       } catch {}
     };
     initAccount();
     setLoading(false);
   }, [address, isConnected]);
+  
   const handleDeposit = () => {
     openModal(<DepositContent address={safe as any} closeModal={closeModal} />);
   };
