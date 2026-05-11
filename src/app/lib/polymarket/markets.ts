@@ -2,10 +2,11 @@ const MARKETS_URL = "https://gamma-api.polymarket.com/markets";
 
 export type PolymarketMarket = {
   id: string;
+  question?: string;
   slug?: string;
-  outcomes?: Array<{
-    tokenId?: string;
-  }>;
+  conditionId?: string;
+  outcomes?: string[] | string;
+  clobTokenIds?: string[] | string;
   tokenId?: string;
 };
 
@@ -30,8 +31,9 @@ export async function getMarketBySlug(slug: string) {
     throw new Error(`Market not found for slug: ${slug}`);
   }
 
-  const tokenId =
-    market.tokenId ?? market.outcomes?.[0]?.tokenId;
+  const clobTokenIds = parseStringArray(market.clobTokenIds);
+  const outcomes = parseStringArray(market.outcomes);
+  const tokenId = market.tokenId ?? clobTokenIds[0];
 
   if (!tokenId) {
     throw new Error(`No tokenId in market for slug: ${slug}`);
@@ -39,7 +41,22 @@ export async function getMarketBySlug(slug: string) {
 
   return {
     marketId: market.id,
+    conditionId: market.conditionId,
     tokenId,
+    tokenIds: clobTokenIds,
+    outcomes,
     market,
   };
+}
+
+function parseStringArray(value: string[] | string | undefined): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
 }

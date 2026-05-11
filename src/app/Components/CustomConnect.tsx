@@ -3,7 +3,6 @@
 import Safe, { type Eip1193Provider } from "@safe-global/protocol-kit";
 import { useAppKit, useDisconnect } from "@reown/appkit/react";
 import { useAppKitAccount } from "@reown/appkit/react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
@@ -222,7 +221,6 @@ export default function CustomConnect() {
 
   const { address, isConnected } = useAppKitAccount();
   const { disconnect } = useDisconnect();
-  const router = useRouter();
 
   async function handleRegisterSafe() {
     try {
@@ -344,97 +342,75 @@ export default function CustomConnect() {
   const conv = Number(safeBalance);
 
   return (
-    <div className="w-full flex flex-col items-center gap-4 justify-center p-4 max-w-120">
+    <div className="flex items-center justify-end">
       {address && isConnected ? (
-        <>
-          <div className="flex px-3 gap-4 border border-gray-200 p-2 w-full flex-col rounded-xl bg-gray-50 shadow-sm font-mono w-max-100">
-            <ul className="flex items-center gap-8 justify-around w-full">
-              <div className="flex w-full">
-                <li className="flex flex-col items-center justify-center w-1/2 ">
-                  <div className="flex flex-col  w-full items-center">
-                    <span className="text-[10px] text-gray-400">POL</span>
-                    <span
-                      className={conv > 0 ? "text-blue-600" : "text-gray-400"}
-                    >
-                      {conv}
-                    </span>
-                  </div>
-                </li>
-                <li className="w-1/2 flex flex-col items-center ">
-                  <div className="flex flex-col items-center border-l pl-4 border-gray-200 w-full justify-center">
-                    <span className="text-[10px] text-gray-400">pUsd</span>
-                    <span
-                      className={
-                        parseFloat(usdcBalance) > 0
-                          ? "text-green-600"
-                          : "text-gray-400"
-                      }
-                    >
-                      ${usdcBalance}
-                    </span>
-                  </div>
-                </li>
-              </div>
-              <div>
-                <li>
-                  <div className="gap-3 flex">
-                    <button
-                      disabled={!signer || !safeAddress}
-                      onClick={async () => {
-                        try {
-                          if (!signer || !safeAddress) {
-                            alert("No signer / safeAddress");
-                            return;
-                          }
-
-                          if (
-                            typeof window !== "undefined" &&
-                            (window as any).ethereum
-                          ) {
-                            await ensurePolygonNetwork(
-                              (window as any).ethereum
-                            );
-                          }
-
-                          await deploySafeIfNeeded(signer, safeAddress);
-
-                          const txHash = await withdrawAllUSDCFromSafe(
-                            signer,
-                            safeAddress
-                          );
-                          alert("Withdraw tx sent: " + txHash);
-                        } catch (e: any) {
-                          console.error("[WITHDRAW ERROR]:", e);
-                          alert(e.message || "Withdraw error");
-                        }
-                      }}
-                      className="bg-sky-300/80 px-4 py-1.5 rounded-md text-sm hover:bg-sky-300 transition cursor-pointer"
-                    >
-                      Withdraw
-                    </button>
-
-                    <button
-                      onClick={() => router.push("/profile")}
-                      className="bg-sky-300/80 px-4 py-1.5 rounded-md text-sm hover:bg-sky-300 transition cursor-pointer"
-                    >
-                      Profile
-                    </button>
-                    <button
-                      onClick={() => disconnect()}
-                      className="px-4 py-1.5 rounded-md text-sm hover:bg-red-300 transition cursor-pointer border border-red-400"
-                    >
-                      Logout
-                    </button>
-                  </div>
-                </li>
-              </div>
-            </ul>
+        <div className="flex items-center gap-3 font-mono">
+          <div className="hidden items-center gap-3 border border-zinc-800 bg-zinc-900/70 px-3 py-2 sm:flex">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-zinc-500">POL</span>
+              <span className={conv > 0 ? "text-sky-300" : "text-zinc-500"}>
+                {conv}
+              </span>
+            </div>
+            <div className="h-7 w-px bg-zinc-800" />
+            <div className="flex flex-col">
+              <span className="text-[10px] text-zinc-500">pUsd</span>
+              <span
+                className={
+                  parseFloat(usdcBalance) > 0
+                    ? "text-green-400"
+                    : "text-zinc-500"
+                }
+              >
+                ${usdcBalance}
+              </span>
+            </div>
           </div>
-        </>
+
+          <button
+            disabled={!signer || !safeAddress}
+            onClick={async () => {
+              try {
+                if (!signer || !safeAddress) {
+                  alert("No signer / safeAddress");
+                  return;
+                }
+
+                if (
+                  typeof window !== "undefined" &&
+                  (window as any).ethereum
+                ) {
+                  await ensurePolygonNetwork((window as any).ethereum);
+                }
+
+                await deploySafeIfNeeded(signer, safeAddress);
+
+                const txHash = await withdrawAllUSDCFromSafe(
+                  signer,
+                  safeAddress
+                );
+                alert("Withdraw tx sent: " + txHash);
+              } catch (e: any) {
+                console.error("[WITHDRAW ERROR]:", e);
+                alert(e.message || "Withdraw error");
+              }
+            }}
+            className="hidden border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900 hover:text-white disabled:cursor-not-allowed disabled:text-zinc-700 disabled:hover:bg-transparent md:block"
+          >
+            Withdraw
+          </button>
+
+          <button
+            onClick={() => disconnect()}
+            className="border border-red-500/60 px-3 py-2 text-sm text-red-300 transition hover:bg-red-500/10"
+          >
+            Logout
+          </button>
+        </div>
       ) : (
         <button
           onClick={() => open()}
-          className="bg-sky-400 text-white px-6 py-2 rounded-full hover:bg-sky-500 transition"
+          className="border border-sky-500/70 px-4 py-2 text-sm text-sky-200 transition hover:bg-sky-500/10"
         >
           Connect
         </button>

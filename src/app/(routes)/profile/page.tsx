@@ -1,72 +1,103 @@
 "use client";
 
-import { useAppKitAccount } from "@reown/appkit/react";
-import { useEffect, useState, useRef, ChangeEvent } from "react";
-import { useRouter } from "next/navigation";
 import Header from "@/app/Components/header";
+import { useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
-import { fetchHistory, type PositionView } from "../../Components/history";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+
+type PortfolioPosition = {
+  title: string;
+  slug: string;
+  eventSlug: string;
+  outcome: string;
+  size: number;
+  avgPrice: number;
+  curPrice: number;
+  currentValue: number;
+  cashPnl: number;
+  realizedPnl: number;
+  percentPnl: number;
+  status: "Open" | "Closed";
+  endDate: string;
+};
+
+type PortfolioStats = {
+  activeCount: number;
+  historyCount: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  totalPnl: number;
+};
+
+type PortfolioResponse = {
+  safeAddress: string;
+  value: number;
+  active: PortfolioPosition[];
+  history: PortfolioPosition[];
+  stats: PortfolioStats;
+};
+
+const AVATAR_KEY = "polybook_profile_avatar";
+const BIO_KEY = "polybook_profile_bio";
 
 export default function Profile() {
   const { address, isConnected } = useAppKitAccount();
-  const [trades, setTrades] = useState<PositionView[]>([]);
   const [loading, setLoading] = useState(false);
   const [safe, setSafe] = useState<string | null>(null);
-  const router = useRouter();
-
-  const [bio, setBio] = useState<string>("");
-  const [editing, setEditing] = useState<boolean>(false);
-  const placeholder = "Say something abt you...";
-  const handleSave = () => {
-    setEditing(false);
-  };
-
-  const [avatarUrl, setAvatarUrl] = useState<string>("/logo.png");
+  const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
+  const [bio, setBio] = useState(() =>
+    typeof window === "undefined" ? "" : localStorage.getItem(BIO_KEY) ?? "",
+  );
+  const [editing, setEditing] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(() =>
+    typeof window === "undefined"
+      ? "/logo.png"
+      : localStorage.getItem(AVATAR_KEY) ?? "/logo.png",
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
+  useEffect(() => {
+    if (!isConnected || !address) {
+      window.setTimeout(() => {
+        setSafe(null);
+        setPortfolio(null);
+      }, 0);
       return;
     }
-
-    const url = URL.createObjectURL(file);
-    setAvatarUrl(url);
-  };
-
-  useEffect(() => {
-    if (!isConnected || !address) return;
 
     const getProfileData = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/user/safe?address=${address}`);
-        if (!res.ok) {
-          console.error("GET /api/user/safe failed:", res.status);
+        const safeRes = await fetch(`/api/user/safe?address=${address}`);
+        if (!safeRes.ok) {
           setSafe(null);
-          setTrades([]);
+          setPortfolio(null);
           return;
         }
 
-        const dbData = await res.json();
-        const safeAddr = (dbData.safeAddress as string) ?? null;
+        const safeData = await safeRes.json();
+        const safeAddr = (safeData.safeAddress as string | null) ?? null;
         setSafe(safeAddr);
 
-        if (safeAddr) {
-          const history = await fetchHistory(safeAddr);
-          setTrades(history);
-        } else {
-          setTrades([]);
+        if (!safeAddr) {
+          setPortfolio(null);
+          return;
         }
+
+        const portfolioRes = await fetch(
+          `/api/profile/portfolio?user=${safeAddr}`,
+        );
+
+        if (!portfolioRes.ok) {
+          setPortfolio(null);
+          return;
+        }
+
+        setPortfolio((await portfolioRes.json()) as PortfolioResponse);
       } catch (e) {
         console.error("Profile data error:", e);
-        setTrades([]);
+        setPortfolio(null);
       } finally {
         setLoading(false);
       }
@@ -75,172 +106,270 @@ export default function Profile() {
     getProfileData();
   }, [isConnected, address]);
 
+  const stats = portfolio?.stats;
+  const totalPnl = stats?.totalPnl ?? 0;
+  const shortSafe = safe ? `${safe.slice(0, 6)}...${safe.slice(-4)}` : "--";
+
+  const profileName = useMemo(() => {
+    if (!address) return "Guest";
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  }, [address]);
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith("image/")) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result);
+      localStorage.setItem(AVATAR_KEY, value);
+      setAvatarUrl(value);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveBio = () => {
+    localStorage.setItem(BIO_KEY, bio);
+    setEditing(false);
+  };
+
   return (
-    <>
-      <div className="flex flex-col items-center h-screen py-5 gap-15 overflow-hidden">
-        <Header />
-        <div className="h-3/4 w-[70vw] shadow-lg hover:scale-101 transition bg-white rounded-xl">
-          <div className="px-7 py-4 flex h-full gap-15">
-            <div className="w-[70%] flex flex-col">
-              <div className="h-[30%] p-3 flex flex-col justify-center">
-                <div className="bg-white rounded-[60px] h-[70%] flex items-center px-8 shadow-lg gap-3 border border-gray-100">
+    <div className="min-h-screen bg-zinc-100">
+      <Header />
+
+      <main className="mx-auto flex w-full max-w-[1400px] flex-col gap-5 px-5 py-5">
+        <section className="grid gap-4 border border-zinc-200 bg-white p-5 shadow-sm lg:grid-cols-[minmax(340px,1fr)_2fr]">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={handleAvatarClick}
+              className="relative h-20 w-20 shrink-0 overflow-hidden border border-zinc-300 bg-zinc-100"
+            >
+              <Image
+                src={avatarUrl}
+                alt="avatar"
+                fill
+                sizes="80px"
+                className="object-cover"
+              />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
+            <div className="min-w-0">
+              <div className="text-lg font-semibold text-zinc-950">
+                {profileName}
+              </div>
+              <div className="mt-1 font-mono text-xs text-zinc-500">
+                Safe: {shortSafe}
+              </div>
+
+              <div className="mt-3 flex items-center gap-2">
+                {editing ? (
+                  <input
+                    autoFocus
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    onBlur={saveBio}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveBio();
+                    }}
+                    className="w-full max-w-[280px] border-b border-zinc-400 bg-transparent text-sm outline-none"
+                    placeholder="Short trader note"
+                  />
+                ) : (
                   <button
                     type="button"
-                    onClick={handleAvatarClick}
-                    className="relative rounded-[60px] overflow-hidden w-[65px] h-[65px] group border border-gray-200"
+                    onClick={() => setEditing(true)}
+                    className="max-w-[320px] truncate text-left text-sm text-zinc-600"
                   >
-                    <Image
-                      src={avatarUrl}
-                      alt="avatar"
-                      fill
-                      sizes="65px"
-                      className="object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/10 cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center text-[11px] text-white transition"></div>
+                    {bio.trim() || "Short trader note"}
                   </button>
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-
-                  <div className="min-w-55 max-w-60">
-                    <p className="font-bold text-[19px]">Morph</p>
-
-                    <div className="flex items-start mt-1">
-                      {editing ? (
-                        <input
-                          autoFocus
-                          value={bio}
-                          onChange={(e) => setBio(e.target.value)}
-                          onBlur={handleSave}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              handleSave();
-                            }
-                          }}
-                          className="text-sm text-black bg-transparent border-b border-gray-600 outline-none max-w-[220px] w-full"
-                          placeholder={placeholder}
-                        />
-                      ) : (
-                        <span className="text-gray-700 text-sm max-w-[220px] break-words">
-                          {bio.trim().length > 0 ? bio : placeholder}
-                        </span>
-                      )}
-
-                      <button
-                        type="button"
-                        className="ml-2 cursor-pointer hover:scale-110 transition mt-[2px] shrink-0"
-                        onClick={() => setEditing(true)}
-                      >
-                        <Image
-                          alt="edit"
-                          width={12}
-                          height={12}
-                          src="/edit.svg"
-                        />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-[70%] pb-5">
-                <div className="bg-white rounded-[30px] h-full flex flex-col px-5 py-6 shadow-lg border border-gray-50 overflow-y-auto">
-                  <h3 className="font-bold mb-4 text-zinc-800">
-                    Trading History
-                  </h3>
-
-                  {loading ? (
-                    <div className="flex justify-center items-center h-full text-gray-400">
-                      Loading trades...
-                    </div>
-                  ) : trades.length > 0 ? (
-                    <div className="flex flex-col gap-3">
-                      {trades.map((trade, index) => (
-                        <div
-                          key={index}
-                          className="flex justify-between items-center p-3 border-b border-gray-50 hover:bg-gray-50 transition rounded-lg"
-                        >
-                          <div className="flex flex-col max-w-[60%]">
-                            <span className="text-[13px] font-medium truncate">
-                              {trade.title}
-                            </span>
-                            <span className="text-[10px] text-gray-400">
-                              {trade.timestamp}
-                            </span>
-                          </div>
-                          <div className="flex gap-6 items-center">
-                            <div className="flex flex-col items-end">
-                              <span
-                                className={`text-[12px] font-bold ${
-                                  trade.outcome === "Yes"
-                                    ? "text-green-500"
-                                    : "text-red-500"
-                                }`}
-                              >
-                                {trade.outcome}
-                              </span>
-                              <span className="text-[11px] text-zinc-500">
-                                ${trade.amount.toFixed(2)}
-                              </span>
-                            </div>
-                            <span
-                              className={`text-[11px] px-2 py-1 rounded-full ${
-                                trade.status === "Open"
-                                  ? "bg-sky-100 text-sky-600"
-                                  : "bg-gray-100 text-gray-500"
-                              }`}
-                            >
-                              {trade.status}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex justify-center items-center h-full text-gray-400 text-sm italic">
-                      No trades found for this Safe.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="w-[30%] h-full flex flex-col">
-              <div className="h-[30%] flex items-center justify-center">
-                <div className="h-[70%] flex shadow-lg w-full items-center justify-center bg-white rounded-2xl border border-gray-50">
-                  <div className="h-full flex flex-col w-full items-center justify-center gap-1">
-                    <p className="flex justify-center font-medium">
-                      W/R: 90%
-                    </p>
-                    <p className="flex justify-center text-gray-500 text-sm text-center px-2 font-mono">
-                      Safe:{" "}
-                      {safe
-                        ? `${safe.slice(0, 5)}...${safe.slice(38, 43)}`
-                        : "—"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="h-[70%]">
-                <div className="h-[90%] flex flex-col items-center shadow-lg rounded-[30px] p-5 bg-white border border-gray-50">
-                  <span className="text-sm font-bold text-zinc-400 uppercase tracking-widest">
-                    Active Markets
-                  </span>
-                  <div className="flex items-center justify-center h-full text-gray-300 italic text-xs">
-                    Coming soon...
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    </>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat label="Portfolio" value={formatUsd(portfolio?.value ?? 0)} />
+            <Stat
+              label="Winrate"
+              value={stats?.winRate === null || !stats ? "--" : `${stats.winRate}%`}
+            />
+            <Stat label="Active" value={String(stats?.activeCount ?? 0)} />
+            <Stat
+              label="Total PnL"
+              value={formatUsd(totalPnl)}
+              tone={totalPnl >= 0 ? "good" : "bad"}
+            />
+          </div>
+        </section>
+
+        <section className="grid min-h-[560px] gap-5 lg:grid-cols-[1.7fr_1fr]">
+          <Panel title="Trading history">
+            {loading ? (
+              <EmptyState text="Loading portfolio..." />
+            ) : portfolio?.history.length ? (
+              <PositionList positions={portfolio.history} />
+            ) : (
+              <EmptyState text="No history for this Safe yet." />
+            )}
+          </Panel>
+
+          <Panel title="Active markets">
+            {loading ? (
+              <EmptyState text="Loading active markets..." />
+            ) : portfolio?.active.length ? (
+              <PositionList positions={portfolio.active} compact />
+            ) : (
+              <EmptyState text="No active positions." />
+            )}
+          </Panel>
+        </section>
+      </main>
+    </div>
   );
+}
+
+function Stat({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "good" | "bad";
+}) {
+  return (
+    <div className="border border-zinc-200 bg-zinc-50 px-4 py-3">
+      <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+        {label}
+      </div>
+      <div
+        className={`mt-1 font-mono text-lg ${
+          tone === "good"
+            ? "text-green-600"
+            : tone === "bad"
+              ? "text-red-600"
+              : "text-zinc-950"
+        }`}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-0 flex-col border border-zinc-200 bg-white shadow-sm">
+      <div className="border-b border-zinc-200 px-5 py-4 text-sm font-semibold text-zinc-950">
+        {title}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+    </div>
+  );
+}
+
+function PositionList({
+  positions,
+  compact = false,
+}: {
+  positions: PortfolioPosition[];
+  compact?: boolean;
+}) {
+  return (
+    <div className="flex flex-col">
+      {positions.map((position, index) => {
+        const pnl = position.cashPnl + position.realizedPnl;
+
+        return (
+          <div
+            key={`${position.slug}-${position.outcome}-${index}`}
+            className="grid gap-3 border-b border-zinc-100 px-2 py-3 last:border-b-0 md:grid-cols-[1fr_auto]"
+          >
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-zinc-900">
+                {position.title}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
+                <span>{position.outcome || "Outcome"}</span>
+                <span>{position.status}</span>
+                {!compact && position.endDate && (
+                  <span>{new Date(position.endDate).toLocaleDateString()}</span>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 text-right font-mono text-xs">
+              <Metric label="Size" value={position.size.toFixed(2)} />
+              <Metric label="Value" value={formatUsd(position.currentValue)} />
+              <Metric
+                label="PnL"
+                value={formatUsd(pnl)}
+                tone={pnl >= 0 ? "good" : "bad"}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "good" | "bad";
+}) {
+  return (
+    <div>
+      <div className="text-[10px] text-zinc-400">{label}</div>
+      <div
+        className={
+          tone === "good"
+            ? "text-green-600"
+            : tone === "bad"
+              ? "text-red-600"
+              : "text-zinc-700"
+        }
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="flex h-full min-h-[220px] items-center justify-center text-sm text-zinc-400">
+      {text}
+    </div>
+  );
+}
+
+function formatUsd(value: number) {
+  return `$${value.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  })}`;
 }

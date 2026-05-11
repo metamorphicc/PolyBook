@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { createConfig } from "wagmi";
 import { AppKitProviderr } from "../../Provider";
-import { http } from "viem";
-import { mainnet } from "viem/chains";
 import { ModalProvider } from "./Components/Modal";
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,14 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PolyBook",
-  description: "",
+  title: "PolyBook Scalp Terminal",
+  description: "Fast Polymarket crypto scalp terminal for BTC, ETH, SOL, and XRP.",
 };
-
-const config = createConfig({
-  chains: [mainnet],
-  transports: { [mainnet.id]: http() },
-});
 
 export default function RootLayout({
   children,

@@ -1,107 +1,185 @@
 "use client";
+
 import Image from "next/image";
-import CustomConnect from "./CustomConnect";
 import { useRouter } from "next/navigation";
-import { useModal } from "./Modal";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { DepositContent } from "./DepositContent";
-import Loading from "./Loading";
+import { useModal } from "./Modal";
+import CustomConnect from "./CustomConnect";
 
-export default function Header() {
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
-  const { openModal, closeModal } = useModal();
-  const { address, isConnected, status } = useAppKitAccount();
-  const [safe, setSafe] = useState();
+type Asset = "BTC" | "ETH" | "SOL" | "XRP";
+
+type PriceView = {
+  asset: Asset;
+  price: number | null;
+  changePercent: number | null;
+};
+
+const ASSETS: Asset[] = ["BTC", "ETH", "SOL", "XRP"];
+
+function pickTwoAssets() {
+  const shuffled = [...ASSETS].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 2);
+}
+
+function MarketPrices() {
+  const [assets] = useState<Asset[]>(() => pickTwoAssets());
+  const [prices, setPrices] = useState<PriceView[]>([]);
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
 
-    if (!isConnected || !address) return;
-    const initAccount = async () => {
-      setLoading(true);
+    const fetchPrices = async () => {
       try {
-        const res = await fetch(`/api/user/safe?address=${address}`);
+        const res = await fetch(`/api/crypto/prices?assets=${assets.join(",")}`);
+        if (!res.ok) return;
 
-        const data = await res.json();
-        let safeAddrFromDb = data.safeAddress ;
-        setSafe(safeAddrFromDb);
+        const data = (await res.json()) as { prices?: PriceView[] };
+        if (!cancelled) setPrices(data.prices ?? []);
       } catch {}
     };
-    initAccount();
-    setLoading(false);
-  }, [address, isConnected]);
-  
-  const handleDeposit = () => {
-    openModal(<DepositContent address={safe as any} closeModal={closeModal} />);
-  };
+
+    fetchPrices();
+    const interval = window.setInterval(fetchPrices, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [assets]);
+
+  const displayPrices = useMemo(
+    () =>
+      assets.map((asset) => {
+        const price = prices.find((item) => item.asset === asset);
+        return price ?? { asset, price: null, changePercent: null };
+      }),
+    [assets, prices],
+  );
+
   return (
-    <div className="px-4 py-2 rounded-[30px] w-[90vw] border border-sky-300/30 mb-3 shadow-lg hover:shadow-xl sticky">
-      <div className="flex items-center w-full px-4">
-        <div className="flex-1 flex items-center">
-          <button
-            className="flex gap-3 text-[25px] cursor-pointer items-center"
-            onClick={() => router.push("/home")}
+    <div className="hidden min-w-[260px] items-center justify-center gap-2 lg:flex">
+      {displayPrices.map((item) => {
+        const positive = (item.changePercent ?? 0) >= 0;
+
+        return (
+          <div
+            key={item.asset}
+            className="flex min-w-[118px] items-center justify-between border border-zinc-800 bg-zinc-900/70 px-3 py-2"
           >
-            <Image
-              src="/logo_blue.jpg"
-              alt="logo"
-              width={40}
-              height={40}
-              className="object-contain rounded-[10px]"
-            />
-            <span className="font-semibold">PolyBook</span>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-semibold text-zinc-500">
+                {item.asset}
+              </span>
+              <span className="font-mono text-[13px] text-zinc-100">
+                {item.price === null
+                  ? "--"
+                  : `$${item.price.toLocaleString("en-US", {
+                      maximumFractionDigits: item.asset === "XRP" ? 4 : 2,
+                    })}`}
+              </span>
+            </div>
+            <span
+              className={`font-mono text-[11px] ${
+                positive ? "text-green-400" : "text-red-400"
+              }`}
+            >
+              {item.changePercent === null
+                ? "--"
+                : `${positive ? "+" : ""}${item.changePercent.toFixed(2)}%`}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Header() {
+  const router = useRouter();
+  const { openModal, closeModal } = useModal();
+  const { address, isConnected } = useAppKitAccount();
+  const [safe, setSafe] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isConnected || !address) {
+      return;
+    }
+
+    const initAccount = async () => {
+      try {
+        const res = await fetch(`/api/user/safe?address=${address}`);
+        const data = await res.json();
+        setSafe((data.safeAddress as string | null) ?? null);
+      } catch {
+        setSafe(null);
+      }
+    };
+
+    initAccount();
+  }, [address, isConnected]);
+
+  const handleDeposit = () => {
+    openModal(<DepositContent address={safe ?? ""} closeModal={closeModal} />);
+  };
+
+  return (
+    <header className="w-full border-b border-zinc-800 bg-zinc-950 text-zinc-100">
+      <div className="mx-auto flex h-[70px] w-full max-w-[1600px] items-center gap-4 px-5">
+        <button
+          type="button"
+          className="flex shrink-0 cursor-pointer items-center gap-3"
+          onClick={() => router.push("/")}
+        >
+          <Image
+            src="/logo_blue.jpg"
+            alt="PolyBook"
+            width={36}
+            height={36}
+            className="object-contain"
+          />
+          <div className="flex items-baseline gap-3">
+            <span className="text-[21px] font-semibold leading-none">
+              PolyBook
+            </span>
+            <span className="hidden border-l border-zinc-800 pl-3 text-xs text-zinc-500 xl:inline">
+              scalp terminal
+            </span>
+          </div>
+        </button>
+
+        <MarketPrices />
+
+        <nav className="ml-auto hidden items-center gap-1 md:flex">
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+          >
+            Terminal
           </button>
-        </div>
+          <button
+            type="button"
+            disabled={!safe}
+            onClick={handleDeposit}
+            className="px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900 hover:text-white disabled:cursor-not-allowed disabled:text-zinc-700 disabled:hover:bg-transparent"
+          >
+            Deposit
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/profile")}
+            className="px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+          >
+            Profile
+          </button>
+        </nav>
 
-        <div className="flex justify-center">
-          <ul className="flex items-center gap-4">
-            <li>
-              <button
-                onClick={() => {
-                  router.push("/home");
-                }}
-                className="border border-2 rounded-md px-4 py-1.5 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer"
-              >
-                Home
-              </button>
-            </li>
-            <li>
-              <button
-                onClick={() => {
-                  router.push("/markets");
-                }}
-                className="border rounded-md px-4 py-1.5 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer"
-              >
-                Markets
-              </button>
-            </li>
-            <li>
-              <button
-                onClick={() => router.push("/scalp")}
-                className="border rounded-md px-4 py-1.5 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer"
-              >
-                Scalp
-              </button>
-            </li>
-            <li>
-              <button
-                className="border rounded-md px-4 py-1.5 transition border-sky-300/50 hover:bg-sky-300 cursor-pointer"
-                onClick={() => {
-                  handleDeposit();
-                }}
-              >
-                Deposit
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        <div className="flex-1 flex items-center justify-end min-w-[140px]">
+        <div className="min-w-0 shrink-0">
           <CustomConnect />
         </div>
       </div>
-    </div>
+    </header>
   );
 }
