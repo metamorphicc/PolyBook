@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
-import { ClobClient } from "@polymarket/clob-client";
+import { ClobClient, type ApiKeyCreds } from "@polymarket/clob-client-v2";
 import { ethers } from "ethers";
 
 export default function UnlockTrading({ children }: { children: React.ReactNode }) {
@@ -18,8 +18,14 @@ export default function UnlockTrading({ children }: { children: React.ReactNode 
   }, []);
 
   const handleUnlock = async () => {
-    if (!address) return alert("Please connect your wallet");
-    if (!window.ethereum) return alert("Wallet provider not found in browser");
+    if (!address) {
+      alert("Please connect your wallet");
+      return;
+    }
+    if (!(window as any).ethereum) {
+      alert("Wallet provider not found in browser");
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -29,7 +35,9 @@ export default function UnlockTrading({ children }: { children: React.ReactNode 
         await switchChainAsync({ chainId: POLYGON_CHAIN_ID });
       }
 
-      const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+      const provider = new ethers.providers.Web3Provider(
+        (window as any).ethereum,
+      );
       await provider.send("eth_requestAccounts", []);
       const signer = provider.getSigner();
 
@@ -38,8 +46,19 @@ export default function UnlockTrading({ children }: { children: React.ReactNode 
 
       console.log("Signer address:", signerAddress);
 
-      const client = new ClobClient("https://clob.polymarket.com", POLYGON_CHAIN_ID, signer as any);
-      const apiCreds = await client.createOrDeriveApiKey();
+      // v2: объектный конструктор
+      const tempClient = new ClobClient({
+        host: "https://clob.polymarket.com",
+        chain: POLYGON_CHAIN_ID,
+        signer,
+      });
+
+      let apiCreds: ApiKeyCreds;
+      if (typeof (tempClient as any).createOrDeriveApiKey === "function") {
+        apiCreds = await (tempClient as any).createOrDeriveApiKey();
+      } else {
+        apiCreds = await (tempClient as any).createApiKey();
+      }
 
       console.log("Keys generated:", apiCreds);
 

@@ -26,6 +26,7 @@ export async function GET(request: Request) {
       rows && rows.length > 0 && rows[0].safe_address
         ? (rows[0].safe_address as string)
         : null;
+    console.log(`from api`+safeAddress)
     return NextResponse.json({ safeAddress });
   } catch (error: any) {
     console.error("GET /api/user/safe error:", error);

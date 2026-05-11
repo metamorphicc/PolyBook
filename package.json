@@ -17,7 +17,7 @@
   "dependencies": {
     "@polymarket/builder-relayer-client": "0.0.9",
     "@polymarket/builder-signing-sdk": "1.0.0",
-    "@polymarket/clob-client": "^5.8.0",
+    "@polymarket/clob-client-v2": "^1.0.3",
     "@privy-io/node": "^0.9.0",
     "@privy-io/react-auth": "^1.28.2",
     "@reown/appkit": "^1.8.19",

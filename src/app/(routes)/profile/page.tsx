@@ -1,18 +1,19 @@
 "use client";
+
 import { useAppKitAccount } from "@reown/appkit/react";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/app/Components/header";
 import Image from "next/image";
-import { fetchHistory } from "@/app/Components/TradeHistoryComponent";
-import { ChangeEvent } from "react";
+import { fetchHistory, type PositionView } from "../../Components/history";
 
 export default function Profile() {
   const { address, isConnected } = useAppKitAccount();
-  const [trades, setTrades] = useState<any[]>([]);
+  const [trades, setTrades] = useState<PositionView[]>([]);
   const [loading, setLoading] = useState(false);
-  const [safe, setSafe] = useState<any>();
+  const [safe, setSafe] = useState<string | null>(null);
   const router = useRouter();
+
   const [bio, setBio] = useState<string>("");
   const [editing, setEditing] = useState<boolean>(false);
   const placeholder = "Say something abt you...";
@@ -45,20 +46,27 @@ export default function Profile() {
     const getProfileData = async () => {
       setLoading(true);
       try {
-        const dbRes = await fetch("/api/getSafeWallet", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address }),
-        });
-        const dbData = await dbRes.json();
-        const safeAddr = dbData.safeAddress;
-        setSafe(safeAddr)
+        const res = await fetch(`/api/user/safe?address=${address}`);
+        if (!res.ok) {
+          console.error("GET /api/user/safe failed:", res.status);
+          setSafe(null);
+          setTrades([]);
+          return;
+        }
+
+        const dbData = await res.json();
+        const safeAddr = (dbData.safeAddress as string) ?? null;
+        setSafe(safeAddr);
+
         if (safeAddr) {
           const history = await fetchHistory(safeAddr);
           setTrades(history);
+        } else {
+          setTrades([]);
         }
       } catch (e) {
         console.error("Profile data error:", e);
+        setTrades([]);
       } finally {
         setLoading(false);
       }
@@ -88,9 +96,7 @@ export default function Profile() {
                       sizes="65px"
                       className="object-cover"
                     />
-                    <div className="absolute inset-0 bg-black/10 cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center text-[11px] text-white transition">
-    
-                    </div>
+                    <div className="absolute inset-0 bg-black/10 cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center text-[11px] text-white transition"></div>
                   </button>
 
                   <input
@@ -100,6 +106,7 @@ export default function Profile() {
                     className="hidden"
                     onChange={handleFileChange}
                   />
+
                   <div className="min-w-55 max-w-60">
                     <p className="font-bold text-[19px]">Morph</p>
 
@@ -179,7 +186,7 @@ export default function Profile() {
                                 {trade.outcome}
                               </span>
                               <span className="text-[11px] text-zinc-500">
-                                ${parseFloat(trade.amount).toFixed(2)}
+                                ${trade.amount.toFixed(2)}
                               </span>
                             </div>
                             <span
@@ -208,9 +215,14 @@ export default function Profile() {
               <div className="h-[30%] flex items-center justify-center">
                 <div className="h-[70%] flex shadow-lg w-full items-center justify-center bg-white rounded-2xl border border-gray-50">
                   <div className="h-full flex flex-col w-full items-center justify-center gap-1">
-                    <p className="flex justify-center font-medium">W/R: 90% </p>
+                    <p className="flex justify-center font-medium">
+                      W/R: 90%
+                    </p>
                     <p className="flex justify-center text-gray-500 text-sm text-center px-2 font-mono">
-                      Safe: {safe?.slice(0, 5)}...{safe?.slice(38, 43)}
+                      Safe:{" "}
+                      {safe
+                        ? `${safe.slice(0, 5)}...${safe.slice(38, 43)}`
+                        : "—"}
                     </p>
                   </div>
                 </div>

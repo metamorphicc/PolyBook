@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     }
 
     const [rows] = await pool.query<UserRow[]>(
-      "SELECT safe_address FROM USERS WHERE address = ?",
+      "SELECT safe_address FROM users WHERE address = ?",
       [address]
     );
 
