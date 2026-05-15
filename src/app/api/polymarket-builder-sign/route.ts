@@ -1,25 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  BuilderApiKeyCreds,
   buildHmacSignature,
 } from "@polymarket/builder-signing-sdk";
+import { serverEnv } from "@/app/lib/env";
 
-const BUILDER_CREDENTIALS: BuilderApiKeyCreds = {
-  key: process.env.POLY_BUILDER_API_KEY!,
-  secret: process.env.POLY_BUILDER_SECRET!,
-  passphrase: process.env.POLY_BUILDER_PASSPHRASE!,
-};
+const MAX_BODY_LENGTH = 50000;
 
 export async function POST(request: NextRequest) {
   try {
     const { method, path, body } = await request.json();
 
+    if (typeof method !== "string" || typeof path !== "string") {
+      return NextResponse.json(
+        { error: "method and path are required" },
+        { status: 400 },
+      );
+    }
+
+    if (body && typeof body !== "string") {
+      return NextResponse.json(
+        { error: "body must be a string" },
+        { status: 400 },
+      );
+    }
+
+    if (body && body.length > MAX_BODY_LENGTH) {
+      return NextResponse.json(
+        { error: "body is too large" },
+        { status: 413 },
+      );
+    }
+
+    const builderCredentials = serverEnv().polyBuilder;
     const sigTimestamp = Date.now().toString();
 
     const signature = buildHmacSignature(
-      BUILDER_CREDENTIALS.secret,
+      builderCredentials.secret,
       parseInt(sigTimestamp),
-      method,
+      method.toUpperCase(),
       path,
       body ?? ""
     );
@@ -27,13 +45,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       POLY_BUILDER_SIGNATURE: signature,
       POLY_BUILDER_TIMESTAMP: sigTimestamp,
-      POLY_BUILDER_API_KEY: BUILDER_CREDENTIALS.key,
-      POLY_BUILDER_PASSPHRASE: BUILDER_CREDENTIALS.passphrase,
+      POLY_BUILDER_API_KEY: builderCredentials.key,
+      POLY_BUILDER_PASSPHRASE: builderCredentials.passphrase,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("[POLY BUILDER SIGN ERROR]:", e);
     return NextResponse.json(
-      { error: e.message ?? "Internal error" },
+      { error: e instanceof Error ? e.message : "Internal error" },
       { status: 500 }
     );
   }

@@ -1,37 +1,39 @@
 import { NextResponse } from "next/server";
 import { pool } from "../../db";
 import { RowDataPacket } from "mysql2";
-import {
-  BuilderConfig,
-  BuilderApiKeyCreds,
-} from "@polymarket/builder-signing-sdk";
+import { isAddress, readSession } from "@/app/lib/auth/session";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const address = searchParams.get("address");
 
-    if (!address) {
+    if (!isAddress(address)) {
       return NextResponse.json(
-        { error: "address is required" },
+        { error: "valid address is required" },
         { status: 400 }
       );
     }
+    const normalizedAddress = address.toLowerCase();
+    const session = await readSession();
+    if (session && session.address !== normalizedAddress) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT safe_address FROM users WHERE address = ?",
-      [address]
+      [normalizedAddress]
     );
 
     const safeAddress =
       rows && rows.length > 0 && rows[0].safe_address
         ? (rows[0].safe_address as string)
         : null;
-    console.log(`from api`+safeAddress)
     return NextResponse.json({ safeAddress });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/user/safe error:", error);
     return NextResponse.json(
-      { error: error.message ?? "Internal error" },
+      { error: error instanceof Error ? error.message : "Internal error" },
       { status: 500 }
     );
   }
@@ -45,11 +47,18 @@ export async function POST(request: Request) {
       safeAddress?: string;
     };
 
-    if (!ownerAddress || !safeAddress) {
+    if (!isAddress(ownerAddress) || !isAddress(safeAddress)) {
       return NextResponse.json(
-        { error: "ownerAddress and safeAddress are required" },
+        { error: "valid ownerAddress and safeAddress are required" },
         { status: 400 }
       );
+    }
+
+    const normalizedOwnerAddress = ownerAddress.toLowerCase();
+    const normalizedSafeAddress = safeAddress.toLowerCase();
+    const session = await readSession();
+    if (session && session.address !== normalizedOwnerAddress) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     await pool.query(
@@ -58,14 +67,14 @@ export async function POST(request: Request) {
       VALUES (?, ?)
       ON DUPLICATE KEY UPDATE safe_address = VALUES(safe_address)
     `,
-      [ownerAddress, safeAddress]
+      [normalizedOwnerAddress, normalizedSafeAddress]
     );
 
-    return NextResponse.json({ ok: true, safeAddress });
-  } catch (error: any) {
+    return NextResponse.json({ ok: true, safeAddress: normalizedSafeAddress });
+  } catch (error: unknown) {
     console.error("POST /api/user/safe error:", error);
     return NextResponse.json(
-      { error: error.message ?? "Internal error" },
+      { error: error instanceof Error ? error.message : "Internal error" },
       { status: 500 }
     );
   }

@@ -3,7 +3,7 @@
 import Safe, { type Eip1193Provider } from "@safe-global/protocol-kit";
 import { useAppKit, useDisconnect } from "@reown/appkit/react";
 import { useAppKitAccount } from "@reown/appkit/react";
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
 import { USDC_E_ADDRESS, ERC20_ABI, deploySafeIfNeeded } from "../share/main";
@@ -14,13 +14,21 @@ import {
 } from "@polymarket/builder-relayer-client";
 import {
   BuilderConfig,
-  BuilderApiKeyCreds,
 } from "@polymarket/builder-signing-sdk";
 
 const RELAYER_URL = "https://relayer-v2.polymarket.com";
 const POLYGON_CHAIN_ID = 137;
 const POLYGON_CHAIN_ID_HEX = "0x89";
 const PUSD_ADDRESS = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
+
+type Eip1193RequestProvider = {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+};
+
+function isSwitchError(error: unknown): error is { code?: number } {
+  return typeof error === "object" && error !== null && "code" in error;
+}
+
 export async function checkContractDeployed(
   signer: ethers.Signer,
   addr: string
@@ -38,7 +46,7 @@ export async function checkContractDeployed(
   return { chainId: network.chainId, isDeployed };
 }
 
-async function ensurePolygonNetwork(ethereum: any) {
+async function ensurePolygonNetwork(ethereum: Eip1193RequestProvider) {
   const currentChainId = await ethereum.request({ method: "eth_chainId" });
   if (currentChainId === POLYGON_CHAIN_ID_HEX) return;
 
@@ -47,8 +55,8 @@ async function ensurePolygonNetwork(ethereum: any) {
       method: "wallet_switchEthereumChain",
       params: [{ chainId: POLYGON_CHAIN_ID_HEX }],
     });
-  } catch (switchError: any) {
-    if (switchError.code === 4902) {
+  } catch (switchError: unknown) {
+    if (isSwitchError(switchError) && switchError.code === 4902) {
       await ethereum.request({
         method: "wallet_addEthereumChain",
         params: [
@@ -82,7 +90,9 @@ export function useEthersSigner() {
   return useMemo<ethers.providers.JsonRpcSigner | null>(() => {
     if (!isConnected || !walletClient || !address) return null;
 
-    const provider = new ethers.providers.Web3Provider(walletClient as any);
+    const provider = new ethers.providers.Web3Provider(
+      walletClient as unknown as ethers.providers.ExternalProvider
+    );
     return provider.getSigner(address) as ethers.providers.JsonRpcSigner;
   }, [address, isConnected, walletClient]);
 }
@@ -95,8 +105,13 @@ export async function withdrawAllUSDCFromSafe(
   const provider = signer.provider as ethers.providers.Web3Provider;
   if (!provider) throw new Error("No provider on signer");
 
-  const ext = provider.provider as any;
-  if (typeof ext.request !== "function") {
+  const ext = provider.provider as unknown;
+  if (
+    typeof ext !== "object" ||
+    ext === null ||
+    !("request" in ext) ||
+    typeof ext.request !== "function"
+  ) {
     throw new Error("Underlying provider is not EIP-1193 compatible");
   }
   const eip1193 = ext as Eip1193Provider;
@@ -143,43 +158,17 @@ export async function withdrawAllUSDCFromSafe(
   return execTxResponse.hash;
 }
 
-async function getBuilderHeaders(
-  method: string,
-  path: string,
-  body: string
-): Promise<Record<string, string>> {
-  const res = await fetch("/api/polymarket-builder-sign", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ method, path, body }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("[builder-sign] error:", res.status, text);
-    throw new Error("Failed to sign builder request");
-  }
-
-  const data = await res.json();
-  return {
-    POLY_BUILDER_SIGNATURE: data.POLY_BUILDER_SIGNATURE,
-    POLY_BUILDER_TIMESTAMP: data.POLY_BUILDER_TIMESTAMP,
-    POLY_BUILDER_API_KEY: data.POLY_BUILDER_API_KEY,
-    POLY_BUILDER_PASSPHRASE: data.POLY_BUILDER_PASSPHRASE,
-  };
-}
-
 export async function deploySafeWithRelayer(
   signer: ethers.providers.JsonRpcSigner
 ) {
-  const builderCreds: BuilderApiKeyCreds = {
-    key: process.env.NEXT_PUBLIC_POLY_BUILDER_API_KEY!,
-    secret: process.env.NEXT_PUBLIC_POLY_BUILDER_SECRET!,
-    passphrase: process.env.NEXT_PUBLIC_POLY_BUILDER_PASSPHRASE!,
-  };
-
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL;
   const builderConfig = new BuilderConfig({
-    localBuilderCreds: builderCreds,
+    remoteBuilderConfig: {
+      url: `${origin}/api/polymarket-builder-sign`,
+    },
   });
 
   const relayClient = new RelayClient(
@@ -222,7 +211,7 @@ export default function CustomConnect() {
   const { address, isConnected } = useAppKitAccount();
   const { disconnect } = useDisconnect();
 
-  async function handleRegisterSafe() {
+  const handleRegisterSafe = useCallback(async () => {
     try {
       if (!signer || !address) {
         console.error("No signer or address");
@@ -251,7 +240,48 @@ export default function CustomConnect() {
     } catch (e) {
       console.error("[handleRegisterSafe error]:", e);
     }
-  }
+  }, [address, signer]);
+
+  const fetchSafeBalance = useCallback(
+    async (safeAddr: string) => {
+      if (!signer || !signer.provider) {
+        console.warn("[BALANCE] No signer or provider");
+        return;
+      }
+
+      try {
+        const provider = signer.provider;
+        const { chainId } = await provider.getNetwork();
+        console.log("[NETWORK CHECK] Chain ID:", chainId);
+
+        if (chainId !== POLYGON_CHAIN_ID) {
+          console.warn("[BALANCE] Wrong network, expected Polygon (137)");
+          return;
+        }
+
+        const polBalanceRaw = await provider.getBalance(safeAddr);
+        const polBalance = ethers.utils.formatEther(polBalanceRaw);
+        console.log(`[RESULT] POL for ${safeAddr}:`, polBalance);
+
+        const pusdContract = new ethers.Contract(
+          PUSD_ADDRESS,
+          ["function balanceOf(address owner) view returns (uint256)"],
+          signer.provider
+        );
+
+        const pusdBalanceRaw = await pusdContract.balanceOf(safeAddr);
+        const pusdBalanceValue = ethers.utils.formatUnits(pusdBalanceRaw, 6);
+
+        console.log(`[RESULT] USDC.e for ${safeAddr}:`, pusdBalanceValue);
+
+        setSafeBalance(parseFloat(polBalance).toFixed(4));
+        setUsdcBalance(parseFloat(pusdBalanceValue).toFixed(2));
+      } catch (e) {
+        console.error("[FETCH ERROR]:", e);
+      }
+    },
+    [signer]
+  );
 
   useEffect(() => {
     if (!signer || !address) return;
@@ -289,55 +319,18 @@ export default function CustomConnect() {
     };
 
     initSafe().catch(console.error);
-  }, [signer, address]);
+  }, [signer, address, handleRegisterSafe]);
 
   useEffect(() => {
     console.log("[EFFECT] safeAddress:", safeAddress, "signer:", !!signer);
     if (!safeAddress || !signer) return;
 
     console.log("[EFFECT] calling fetchSafeBalance for", safeAddress);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSafeBalance(safeAddress).catch((e) =>
       console.error("[fetchSafeBalance error]:", e)
     );
-  }, [safeAddress, signer]);
-
-  const fetchSafeBalance = async (safeAddr: string) => {
-    if (!signer || !signer.provider) {
-      console.warn("[BALANCE] No signer or provider");
-      return;
-    }
-
-    try {
-      const provider = signer.provider;
-      const { chainId } = await provider.getNetwork();
-      console.log("🌐 [NETWORK CHECK] Chain ID:", chainId);
-
-      if (chainId !== POLYGON_CHAIN_ID) {
-        console.warn("[BALANCE] Wrong network, expected Polygon (137)");
-        return;
-      }
-
-      const polBalanceRaw = await provider.getBalance(safeAddr);
-      const polBalance = ethers.utils.formatEther(polBalanceRaw);
-      console.log(`📡 [RESULT] POL для ${safeAddr}:`, polBalance);
-
-      const pusdContract = new ethers.Contract(
-        PUSD_ADDRESS,
-        ["function balanceOf(address owner) view returns (uint256)"],
-        signer.provider
-      );
-
-      const pusdBalanceRaw = await pusdContract.balanceOf(safeAddr);
-      const pusdBalanceValue = ethers.utils.formatUnits(pusdBalanceRaw, 6);
-
-      console.log(`📡 [RESULT] USDC.e для ${safeAddr}:`, pusdBalanceValue);
-
-      setSafeBalance(parseFloat(polBalance).toFixed(4));
-      setUsdcBalance(parseFloat(pusdBalanceValue).toFixed(2));
-    } catch (e) {
-      console.error("[FETCH ERROR]:", e);
-    }
-  };
+  }, [safeAddress, signer, fetchSafeBalance]);
 
   const conv = Number(safeBalance);
 
@@ -376,11 +369,15 @@ export default function CustomConnect() {
                   return;
                 }
 
-                if (
-                  typeof window !== "undefined" &&
-                  (window as any).ethereum
-                ) {
-                  await ensurePolygonNetwork((window as any).ethereum);
+                const ethereum =
+                  typeof window !== "undefined"
+                    ? (window as Window & {
+                        ethereum?: Eip1193RequestProvider;
+                      }).ethereum
+                    : undefined;
+
+                if (ethereum) {
+                  await ensurePolygonNetwork(ethereum);
                 }
 
                 await deploySafeIfNeeded(signer, safeAddress);
@@ -390,9 +387,9 @@ export default function CustomConnect() {
                   safeAddress
                 );
                 alert("Withdraw tx sent: " + txHash);
-              } catch (e: any) {
+              } catch (e: unknown) {
                 console.error("[WITHDRAW ERROR]:", e);
-                alert(e.message || "Withdraw error");
+                alert(e instanceof Error ? e.message : "Withdraw error");
               }
             }}
             className="hidden border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900 hover:text-white disabled:cursor-not-allowed disabled:text-zinc-700 disabled:hover:bg-transparent md:block"

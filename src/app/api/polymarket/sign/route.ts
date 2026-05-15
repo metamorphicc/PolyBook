@@ -1,32 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  BuilderApiKeyCreds,
   buildHmacSignature,
 } from "@polymarket/builder-signing-sdk";
-
-const BUILDER_CREDENTIALS: BuilderApiKeyCreds = {
-  key: process.env.POLYMARKET_BUILDER_API_KEY!,
-  secret: process.env.POLYMARKET_BUILDER_SECRET!,
-  passphrase: process.env.POLYMARKET_BUILDER_PASSPHRASE!,
-};
+import { serverEnv } from "@/app/lib/env";
 
 export async function POST(request: NextRequest) {
-  const { method, path, body } = await request.json();
+  try {
+    const { method, path, body } = await request.json();
 
-  const sigTimestamp = Date.now().toString();
+    if (typeof method !== "string" || typeof path !== "string") {
+      return NextResponse.json(
+        { error: "method and path are required" },
+        { status: 400 },
+      );
+    }
 
-  const signature = buildHmacSignature(
-    BUILDER_CREDENTIALS.secret,
-    parseInt(sigTimestamp),
-    method,
-    path,
-    body,
-  );
+    const builderCredentials = serverEnv().polyBuilder;
+    const sigTimestamp = Date.now().toString();
 
-  return NextResponse.json({
-    POLY_BUILDER_SIGNATURE: signature,
-    POLY_BUILDER_TIMESTAMP: sigTimestamp,
-    POLY_BUILDER_API_KEY: BUILDER_CREDENTIALS.key,
-    POLY_BUILDER_PASSPHRASE: BUILDER_CREDENTIALS.passphrase,
-  });
+    const signature = buildHmacSignature(
+      builderCredentials.secret,
+      parseInt(sigTimestamp),
+      method.toUpperCase(),
+      path,
+      body ?? "",
+    );
+
+    return NextResponse.json({
+      POLY_BUILDER_SIGNATURE: signature,
+      POLY_BUILDER_TIMESTAMP: sigTimestamp,
+      POLY_BUILDER_API_KEY: builderCredentials.key,
+      POLY_BUILDER_PASSPHRASE: builderCredentials.passphrase,
+    });
+  } catch (error) {
+    console.error("[POLYMARKET SIGN ERROR]:", error);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
 }
