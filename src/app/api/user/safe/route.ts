@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       safeAddress?: string;
     };
 
-    if (!isAddress(ownerAddress) || !isAddress(safeAddress)) {
+    if (!isAddress(ownerAddress) || (safeAddress !== undefined && !isAddress(safeAddress))) {
       return NextResponse.json(
         { error: "valid ownerAddress and safeAddress are required" },
         { status: 400 }
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     const normalizedOwnerAddress = ownerAddress.toLowerCase();
-    const normalizedSafeAddress = safeAddress.toLowerCase();
+    const normalizedSafeAddress = safeAddress?.toLowerCase() ?? null;
     const session = await readSession();
     if (session && session.address !== normalizedOwnerAddress) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       `
       INSERT INTO users (address, safe_address)
       VALUES (?, ?)
-      ON DUPLICATE KEY UPDATE safe_address = VALUES(safe_address)
+      ON DUPLICATE KEY UPDATE safe_address = COALESCE(VALUES(safe_address), safe_address)
     `,
       [normalizedOwnerAddress, normalizedSafeAddress]
     );

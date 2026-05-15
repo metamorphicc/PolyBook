@@ -104,20 +104,28 @@ export default function Header() {
 
   useEffect(() => {
     if (!isConnected || !address) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSafe(null);
       return;
     }
+
+    let cancelled = false;
 
     const initAccount = async () => {
       try {
         const res = await fetch(`/api/user/safe?address=${address}`);
         const data = await res.json();
-        setSafe((data.safeAddress as string | null) ?? null);
+        if (!cancelled) setSafe((data.safeAddress as string | null) ?? null);
       } catch {
-        setSafe(null);
+        if (!cancelled) setSafe(null);
       }
     };
 
     initAccount();
+
+    return () => {
+      cancelled = true;
+    };
   }, [address, isConnected]);
 
   const handleDeposit = () => {
@@ -177,7 +185,7 @@ export default function Header() {
         </nav>
 
         <div className="min-w-0 shrink-0">
-          <CustomConnect />
+          <CustomConnect onSafeAddress={setSafe} />
         </div>
       </div>
     </header>

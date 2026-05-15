@@ -200,7 +200,24 @@ export async function deploySafeWithRelayer(
   return result.proxyAddress as string;
 }
 
-export default function CustomConnect() {
+async function ensureUserRow(ownerAddress: string) {
+  const res = await fetch("/api/user/safe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ownerAddress }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? "Failed to create user row");
+  }
+}
+
+type CustomConnectProps = {
+  onSafeAddress?: (safeAddress: string | null) => void;
+};
+
+export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
   const [safeBalance, setSafeBalance] = useState<string>("0");
   const [usdcBalance, setUsdcBalance] = useState<string>("0.00");
   const [safeAddress, setSafeAddress] = useState<string | null>(null);
@@ -216,6 +233,17 @@ export default function CustomConnect() {
       if (!signer || !address) {
         console.error("No signer or address");
         return;
+      }
+
+      const ethereum =
+        typeof window !== "undefined"
+          ? (window as Window & {
+              ethereum?: Eip1193RequestProvider;
+            }).ethereum
+          : undefined;
+
+      if (ethereum) {
+        await ensurePolygonNetwork(ethereum);
       }
 
       const deployedSafeAddress = await deploySafeWithRelayer(signer);
@@ -237,10 +265,11 @@ export default function CustomConnect() {
       }
 
       setSafeAddress(deployedSafeAddress);
+      onSafeAddress?.(deployedSafeAddress);
     } catch (e) {
       console.error("[handleRegisterSafe error]:", e);
     }
-  }, [address, signer]);
+  }, [address, onSafeAddress, signer]);
 
   const fetchSafeBalance = useCallback(
     async (safeAddr: string) => {
@@ -288,6 +317,8 @@ export default function CustomConnect() {
 
     const initSafe = async () => {
       try {
+        await ensureUserRow(address);
+
         const res = await fetch(`/api/user/safe?address=${address}`);
 
         if (!res.ok) {
@@ -313,13 +344,14 @@ export default function CustomConnect() {
 
         console.log("[INIT] safeAddrFromDb:", safeAddrFromDb);
         setSafeAddress(safeAddrFromDb);
+        onSafeAddress?.(safeAddrFromDb);
       } catch (e) {
         console.error("[initSafe error]:", e);
       }
     };
 
     initSafe().catch(console.error);
-  }, [signer, address, handleRegisterSafe]);
+  }, [signer, address, handleRegisterSafe, onSafeAddress]);
 
   useEffect(() => {
     console.log("[EFFECT] safeAddress:", safeAddress, "signer:", !!signer);
