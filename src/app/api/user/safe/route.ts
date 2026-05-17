@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       safeAddress?: string;
     };
 
-    if (!isAddress(ownerAddress) || (safeAddress !== undefined && !isAddress(safeAddress))) {
+    if (!isAddress(ownerAddress) || !isAddress(safeAddress)) {
       return NextResponse.json(
         { error: "valid ownerAddress and safeAddress are required" },
         { status: 400 }
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     const normalizedOwnerAddress = ownerAddress.toLowerCase();
-    const normalizedSafeAddress = safeAddress?.toLowerCase() ?? null;
+    const normalizedSafeAddress = safeAddress.toLowerCase();
     const session = await readSession();
     if (session && session.address !== normalizedOwnerAddress) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

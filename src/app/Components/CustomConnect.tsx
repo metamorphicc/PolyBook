@@ -8,6 +8,7 @@ import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
 import { USDC_E_ADDRESS, ERC20_ABI, deploySafeIfNeeded } from "../share/main";
 import {
+  deriveSafe,
   RelayClient,
   RelayerTransactionState,
   RelayerTxType,
@@ -20,6 +21,7 @@ const RELAYER_URL = "https://relayer-v2.polymarket.com";
 const POLYGON_CHAIN_ID = 137;
 const POLYGON_CHAIN_ID_HEX = "0x89";
 const PUSD_ADDRESS = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
+const SAFE_FACTORY_ADDRESS = "0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b";
 
 type Eip1193RequestProvider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -161,6 +163,8 @@ export async function withdrawAllUSDCFromSafe(
 export async function deploySafeWithRelayer(
   signer: ethers.providers.JsonRpcSigner
 ) {
+  const ownerAddress = await signer.getAddress();
+  const expectedSafeAddress = deriveSafe(ownerAddress, SAFE_FACTORY_ADDRESS);
   const origin =
     typeof window !== "undefined"
       ? window.location.origin
@@ -179,7 +183,21 @@ export async function deploySafeWithRelayer(
     RelayerTxType.SAFE
   );
 
-  const resp = await relayClient.deploy();
+  const deployed = await relayClient.getDeployed(expectedSafeAddress);
+  if (deployed) {
+    return expectedSafeAddress;
+  }
+
+  let resp;
+  try {
+    resp = await relayClient.deploy();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("safe already deployed")) {
+      return expectedSafeAddress;
+    }
+
+    throw error;
+  }
 
   const result = await relayClient.pollUntilState(
     resp.transactionID,
@@ -197,20 +215,12 @@ export async function deploySafeWithRelayer(
     throw new Error("Safe deployment failed");
   }
 
-  return result.proxyAddress as string;
+  return (result.proxyAddress as string | undefined) ?? expectedSafeAddress;
 }
 
-async function ensureUserRow(ownerAddress: string) {
-  const res = await fetch("/api/user/safe", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ownerAddress }),
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error ?? "Failed to create user row");
-  }
+export async function deriveSafeAddress(signer: ethers.providers.JsonRpcSigner) {
+  const ownerAddress = await signer.getAddress();
+  return deriveSafe(ownerAddress, SAFE_FACTORY_ADDRESS);
 }
 
 type CustomConnectProps = {
@@ -245,6 +255,24 @@ export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
       if (ethereum) {
         await ensurePolygonNetwork(ethereum);
       }
+
+      const expectedSafeAddress = await deriveSafeAddress(signer);
+      const preSaveRes = await fetch("/api/user/safe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerAddress: address,
+          safeAddress: expectedSafeAddress,
+        }),
+      });
+
+      if (!preSaveRes.ok) {
+        const data = await preSaveRes.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to save predicted safe");
+      }
+
+      setSafeAddress(expectedSafeAddress);
+      onSafeAddress?.(expectedSafeAddress);
 
       const deployedSafeAddress = await deploySafeWithRelayer(signer);
       console.log("Deployed safe:", deployedSafeAddress);
@@ -317,8 +345,6 @@ export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
 
     const initSafe = async () => {
       try {
-        await ensureUserRow(address);
-
         const res = await fetch(`/api/user/safe?address=${address}`);
 
         if (!res.ok) {
