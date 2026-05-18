@@ -21,21 +21,12 @@ import { WithdrawContent } from "./WithdrawContent";
 
 const RELAYER_URL = "https://relayer-v2.polymarket.com";
 const POLYGON_CHAIN_ID = 137;
-const POLYGON_CHAIN_ID_HEX = "0x89";
 const PUSD_ADDRESS = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
 const SAFE_FACTORY_ADDRESS = "0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b";
 const WITHDRAW_TOKENS = [
   { symbol: "pUSD", address: PUSD_ADDRESS },
   { symbol: "USDC.e", address: USDC_E_ADDRESS },
 ];
-
-type Eip1193RequestProvider = {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-};
-
-function isSwitchError(error: unknown): error is { code?: number } {
-  return typeof error === "object" && error !== null && "code" in error;
-}
 
 export async function checkContractDeployed(
   signer: ethers.Signer,
@@ -52,43 +43,6 @@ export async function checkContractDeployed(
   console.log("[CHECK] isDeployed:", isDeployed);
 
   return { chainId: network.chainId, isDeployed };
-}
-
-async function ensurePolygonNetwork(ethereum: Eip1193RequestProvider) {
-  const currentChainId = await ethereum.request({ method: "eth_chainId" });
-  if (currentChainId === POLYGON_CHAIN_ID_HEX) return;
-
-  try {
-    await ethereum.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: POLYGON_CHAIN_ID_HEX }],
-    });
-  } catch (switchError: unknown) {
-    if (isSwitchError(switchError) && switchError.code === 4902) {
-      await ethereum.request({
-        method: "wallet_addEthereumChain",
-        params: [
-          {
-            chainId: POLYGON_CHAIN_ID_HEX,
-            chainName: "Polygon Mainnet",
-            rpcUrls: ["https://polygon-rpc.com/"],
-            nativeCurrency: {
-              name: "POL",
-              symbol: "POL",
-              decimals: 18,
-            },
-            blockExplorerUrls: ["https://polygonscan.com/"],
-          },
-        ],
-      });
-      await ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: POLYGON_CHAIN_ID_HEX }],
-      });
-    } else {
-      throw switchError;
-    }
-  }
 }
 
 export function useEthersSigner() {
@@ -131,7 +85,9 @@ export async function withdrawAllUSDCFromSafe(
   console.log("[WITHDRAW] safe:", safeAddress, "destination:", destinationAddress);
   const code = await provider.getCode(safeAddress);
   if (code === "0x") {
-    throw new Error("Safe is not deployed on this network");
+    throw new Error(
+      "This Safe address is predicted but not deployed on Polygon yet. Withdraw is available only after the Safe exists on-chain."
+    );
   }
 
   const transactions = [];
@@ -376,34 +332,25 @@ export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
         safeAddress={safeAddress}
         closeModal={closeModal}
         onSend={async (destinationAddress) => {
-          const ethereum =
-            typeof window !== "undefined"
-              ? (window as Window & {
-                  ethereum?: Eip1193RequestProvider;
-                }).ethereum
-              : undefined;
-
-          if (ethereum) {
-            await ensurePolygonNetwork(ethereum);
+          const network = await signer.provider.getNetwork();
+          if (network.chainId !== POLYGON_CHAIN_ID) {
+            throw new Error("Switch your wallet to Polygon before withdrawing.");
           }
 
-          const deployedSafeAddress = await deploySafeWithRelayer(signer);
-          const activeSafeAddress = deployedSafeAddress || safeAddress;
-
-          if (activeSafeAddress.toLowerCase() !== safeAddress.toLowerCase()) {
-            setSafeAddress(activeSafeAddress);
-            onSafeAddress?.(activeSafeAddress);
-            if (address) {
-              await saveSafeAddress(address, activeSafeAddress);
-            }
+          const connectedOwner = await signer.getAddress();
+          if (
+            address &&
+            connectedOwner.toLowerCase() !== address.toLowerCase()
+          ) {
+            throw new Error("Connected wallet changed. Reconnect your wallet.");
           }
 
           const txHash = await withdrawAllUSDCFromSafe(
             signer,
-            activeSafeAddress,
+            safeAddress,
             destinationAddress
           );
-          await fetchSafeBalance(activeSafeAddress);
+          await fetchSafeBalance(safeAddress);
           return txHash;
         }}
       />
