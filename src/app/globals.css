@@ -3,8 +3,42 @@
 
 
 :root {
-  --background: #ffffff;
-  --foreground: #000000;
+  --background: #0b0d12;
+  --foreground: #f4f4f5;
+  --surface: #10131b;
+  --surface-muted: #171a24;
+  --surface-soft: #202331;
+  --border: #272b38;
+  --muted: #8a91a3;
+  --accent: #38bdf8;
+  --terminal-bg: #0d1017;
+  --terminal-grid: #161a24;
+}
+
+:root[data-theme="light"] {
+  --background: #eef1f6;
+  --foreground: #161922;
+  --surface: #fbfcfe;
+  --surface-muted: #edf1f7;
+  --surface-soft: #dfe6f0;
+  --border: #cfd7e4;
+  --muted: #667085;
+  --accent: #0f75d8;
+  --terminal-bg: #f8fafc;
+  --terminal-grid: #e4e9f2;
+}
+
+:root[data-theme="dark"] {
+  --background: #0b0d12;
+  --foreground: #f4f4f5;
+  --surface: #10131b;
+  --surface-muted: #171a24;
+  --surface-soft: #202331;
+  --border: #272b38;
+  --muted: #8a91a3;
+  --accent: #38bdf8;
+  --terminal-bg: #0d1017;
+  --terminal-grid: #161a24;
 }
 
 @keyframes arrow-bounce {
@@ -48,8 +82,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #ffffff;
-    --foreground: #000000;
+    --background: #0b0d12;
+    --foreground: #f4f4f5;
   }
 }
 
@@ -62,8 +96,43 @@ svg[width=""] {
 }
 
 body {
-  
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.theme-bg {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.theme-surface {
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.theme-surface-muted {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+.theme-border {
+  border-color: var(--border);
+}
+
+.theme-muted {
+  color: var(--muted);
+}
+
+.theme-terminal-bg {
+  background: var(--terminal-bg);
+}
+
+.theme-center-icon {
+  filter: none;
+  transition: filter 180ms ease, opacity 180ms ease;
+}
+
+:root[data-theme="dark"] .theme-center-icon {
+  filter: invert(1) brightness(1.25);
 }

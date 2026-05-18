@@ -138,16 +138,16 @@ export default function Profile() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-100">
+    <div className="min-h-screen theme-bg">
       <Header />
 
       <main className="mx-auto flex w-full max-w-[1400px] flex-col gap-5 px-5 py-5">
-        <section className="grid gap-4 border border-zinc-200 bg-white p-5 shadow-sm lg:grid-cols-[minmax(340px,1fr)_2fr]">
+        <section className="grid gap-4 border theme-border theme-surface p-5 shadow-sm lg:grid-cols-[minmax(340px,1fr)_2fr]">
           <div className="flex items-center gap-4">
             <button
               type="button"
               onClick={handleAvatarClick}
-              className="relative h-20 w-20 shrink-0 overflow-hidden border border-zinc-300 bg-zinc-100"
+              className="relative h-20 w-20 shrink-0 overflow-hidden border theme-border bg-[var(--surface-muted)]"
             >
               <Image
                 src={avatarUrl}
@@ -166,10 +166,10 @@ export default function Profile() {
             />
 
             <div className="min-w-0">
-              <div className="text-lg font-semibold text-zinc-950">
+              <div className="text-lg font-semibold text-[var(--foreground)]">
                 {profileName}
               </div>
-              <div className="mt-1 font-mono text-xs text-zinc-500">
+              <div className="mt-1 font-mono text-xs theme-muted">
                 Safe: {shortSafe}
               </div>
 
@@ -183,14 +183,14 @@ export default function Profile() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") saveBio();
                     }}
-                    className="w-full max-w-[280px] border-b border-zinc-400 bg-transparent text-sm outline-none"
+                    className="w-full max-w-[280px] border-b theme-border bg-transparent text-sm outline-none"
                     placeholder="Short trader note"
                   />
                 ) : (
                   <button
                     type="button"
                     onClick={() => setEditing(true)}
-                    className="max-w-[320px] truncate text-left text-sm text-zinc-600"
+                    className="max-w-[320px] truncate text-left text-sm theme-muted"
                   >
                     {bio.trim() || "Short trader note"}
                   </button>
@@ -250,8 +250,8 @@ function Stat({
   tone?: "neutral" | "good" | "bad";
 }) {
   return (
-    <div className="border border-zinc-200 bg-zinc-50 px-4 py-3">
-      <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+    <div className="border theme-border bg-[var(--surface-muted)] px-4 py-3">
+      <div className="text-[11px] uppercase tracking-wide theme-muted">
         {label}
       </div>
       <div
@@ -260,7 +260,7 @@ function Stat({
             ? "text-green-600"
             : tone === "bad"
               ? "text-red-600"
-              : "text-zinc-950"
+              : "text-[var(--foreground)]"
         }`}
       >
         {value}
@@ -277,8 +277,8 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-0 flex-col border border-zinc-200 bg-white shadow-sm">
-      <div className="border-b border-zinc-200 px-5 py-4 text-sm font-semibold text-zinc-950">
+    <div className="flex min-h-0 flex-col border theme-border theme-surface shadow-sm">
+      <div className="border-b theme-border px-5 py-4 text-sm font-semibold text-[var(--foreground)]">
         {title}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
@@ -301,13 +301,13 @@ function PositionList({
         return (
           <div
             key={`${position.slug}-${position.outcome}-${index}`}
-            className="grid gap-3 border-b border-zinc-100 px-2 py-3 last:border-b-0 md:grid-cols-[1fr_auto]"
+            className="grid gap-3 border-b theme-border px-2 py-3 last:border-b-0 md:grid-cols-[1fr_auto]"
           >
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-zinc-900">
+              <div className="truncate text-sm font-medium text-[var(--foreground)]">
                 {position.title}
               </div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs theme-muted">
                 <span>{position.outcome || "Outcome"}</span>
                 <span>{position.status}</span>
                 {!compact && position.endDate && (
@@ -343,14 +343,14 @@ function Metric({
 }) {
   return (
     <div>
-      <div className="text-[10px] text-zinc-400">{label}</div>
+      <div className="text-[10px] theme-muted">{label}</div>
       <div
         className={
           tone === "good"
             ? "text-green-600"
             : tone === "bad"
               ? "text-red-600"
-              : "text-zinc-700"
+              : "text-[var(--foreground)]"
         }
       >
         {value}
@@ -361,7 +361,7 @@ function Metric({
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="flex h-full min-h-[220px] items-center justify-center text-sm text-zinc-400">
+    <div className="flex h-full min-h-[220px] items-center justify-center text-sm theme-muted">
       {text}
     </div>
   );

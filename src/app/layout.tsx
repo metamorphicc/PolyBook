@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppKitProviderr } from "../../Provider";
 import { ModalProvider } from "./Components/Modal";
+import { ThemeProvider } from "./Components/ThemeProvider";
+import { ThemeToggle } from "./Components/ThemeToggle";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -28,10 +30,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ModalProvider>
-          <div id="modal-root" />
-          <AppKitProviderr>{children}</AppKitProviderr>
-        </ModalProvider>
+        <ThemeProvider>
+          <ModalProvider>
+            <div id="modal-root" />
+            <ThemeToggle />
+            <div className="min-h-screen theme-bg">
+              <AppKitProviderr>{children}</AppKitProviderr>
+            </div>
+          </ModalProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

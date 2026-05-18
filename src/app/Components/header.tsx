@@ -66,13 +66,13 @@ function MarketPrices() {
         return (
           <div
             key={item.asset}
-            className="flex min-w-[118px] items-center justify-between border border-zinc-800 bg-zinc-900/70 px-3 py-2"
+            className="flex min-w-[118px] items-center justify-between border theme-border bg-[var(--surface-muted)] px-3 py-2"
           >
             <div className="flex flex-col">
-              <span className="text-[10px] font-semibold text-zinc-500">
+              <span className="text-[10px] font-semibold theme-muted">
                 {item.asset}
               </span>
-              <span className="font-mono text-[13px] text-zinc-100">
+              <span className="font-mono text-[13px] text-[var(--foreground)]">
                 {item.price === null
                   ? "--"
                   : `$${item.price.toLocaleString("en-US", {
@@ -133,7 +133,7 @@ export default function Header() {
   };
 
   return (
-    <header className="w-full border-b border-zinc-800 bg-zinc-950 text-zinc-100">
+    <header className="w-full border-b theme-border theme-surface">
       <div className="mx-auto flex h-[70px] w-full max-w-[1600px] items-center gap-4 px-5">
         <button
           type="button"
@@ -151,7 +151,7 @@ export default function Header() {
             <span className="text-[21px] font-semibold leading-none">
               PolyBook
             </span>
-            <span className="hidden border-l border-zinc-800 pl-3 text-xs text-zinc-500 xl:inline">
+            <span className="hidden border-l theme-border pl-3 text-xs theme-muted xl:inline">
               scalp terminal
             </span>
           </div>
@@ -163,7 +163,7 @@ export default function Header() {
           <button
             type="button"
             onClick={() => router.push("/")}
-            className="px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+            className="px-3 py-2 text-sm theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
           >
             Terminal
           </button>
@@ -171,14 +171,14 @@ export default function Header() {
             type="button"
             disabled={!safe}
             onClick={handleDeposit}
-            className="px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900 hover:text-white disabled:cursor-not-allowed disabled:text-zinc-700 disabled:hover:bg-transparent"
+            className="px-3 py-2 text-sm theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
           >
             Deposit
           </button>
           <button
             type="button"
             onClick={() => router.push("/profile")}
-            className="px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+            className="px-3 py-2 text-sm theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
           >
             Profile
           </button>
