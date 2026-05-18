@@ -218,9 +218,24 @@ export async function deploySafeWithRelayer(
   return (result.proxyAddress as string | undefined) ?? expectedSafeAddress;
 }
 
-export async function deriveSafeAddress(signer: ethers.providers.JsonRpcSigner) {
-  const ownerAddress = await signer.getAddress();
+export function deriveSafeAddress(ownerAddress: string) {
   return deriveSafe(ownerAddress, SAFE_FACTORY_ADDRESS);
+}
+
+async function saveSafeAddress(ownerAddress: string, safeAddress: string) {
+  const res = await fetch("/api/user/safe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ownerAddress,
+      safeAddress,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? "Failed to save safe");
+  }
 }
 
 type CustomConnectProps = {
@@ -237,67 +252,6 @@ export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
 
   const { address, isConnected } = useAppKitAccount();
   const { disconnect } = useDisconnect();
-
-  const handleRegisterSafe = useCallback(async () => {
-    try {
-      if (!signer || !address) {
-        console.error("No signer or address");
-        return;
-      }
-
-      const ethereum =
-        typeof window !== "undefined"
-          ? (window as Window & {
-              ethereum?: Eip1193RequestProvider;
-            }).ethereum
-          : undefined;
-
-      if (ethereum) {
-        await ensurePolygonNetwork(ethereum);
-      }
-
-      const expectedSafeAddress = await deriveSafeAddress(signer);
-      const preSaveRes = await fetch("/api/user/safe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ownerAddress: address,
-          safeAddress: expectedSafeAddress,
-        }),
-      });
-
-      if (!preSaveRes.ok) {
-        const data = await preSaveRes.json().catch(() => ({}));
-        throw new Error(data.error ?? "Failed to save predicted safe");
-      }
-
-      setSafeAddress(expectedSafeAddress);
-      onSafeAddress?.(expectedSafeAddress);
-
-      const deployedSafeAddress = await deploySafeWithRelayer(signer);
-      console.log("Deployed safe:", deployedSafeAddress);
-
-      const res = await fetch("/api/user/safe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ownerAddress: address,
-          safeAddress: deployedSafeAddress,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        console.error("Failed to save safe:", data);
-        throw new Error(data.error ?? "Failed to save safe");
-      }
-
-      setSafeAddress(deployedSafeAddress);
-      onSafeAddress?.(deployedSafeAddress);
-    } catch (e) {
-      console.error("[handleRegisterSafe error]:", e);
-    }
-  }, [address, onSafeAddress, signer]);
 
   const fetchSafeBalance = useCallback(
     async (safeAddr: string) => {
@@ -341,7 +295,12 @@ export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
   );
 
   useEffect(() => {
-    if (!signer || !address) return;
+    if (!isConnected || !address) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSafeAddress(null);
+      onSafeAddress?.(null);
+      return;
+    }
 
     const initSafe = async () => {
       try {
@@ -364,8 +323,9 @@ export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
         }
 
         if (!safeAddrFromDb) {
-          await handleRegisterSafe();
-          return;
+          const expectedSafeAddress = deriveSafeAddress(address);
+          await saveSafeAddress(address, expectedSafeAddress);
+          safeAddrFromDb = expectedSafeAddress;
         }
 
         console.log("[INIT] safeAddrFromDb:", safeAddrFromDb);
@@ -377,7 +337,7 @@ export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
     };
 
     initSafe().catch(console.error);
-  }, [signer, address, handleRegisterSafe, onSafeAddress]);
+  }, [isConnected, address, onSafeAddress]);
 
   useEffect(() => {
     console.log("[EFFECT] safeAddress:", safeAddress, "signer:", !!signer);
