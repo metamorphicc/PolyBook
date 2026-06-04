@@ -32,7 +32,9 @@ function MarketPrices() {
 
     const fetchPrices = async () => {
       try {
-        const res = await fetch(`/api/crypto/prices?assets=${assets.join(",")}`);
+        const res = await fetch(`/api/crypto/prices?assets=${assets.join(",")}`, {
+          cache: "no-store",
+        });
         if (!res.ok) return;
 
         const data = (await res.json()) as { prices?: PriceView[] };

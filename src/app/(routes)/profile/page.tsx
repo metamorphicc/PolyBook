@@ -41,6 +41,98 @@ type PortfolioResponse = {
 const AVATAR_KEY = "polybook_profile_avatar";
 const BIO_KEY = "polybook_profile_bio";
 
+const MOCK_PORTFOLIO: PortfolioResponse = {
+  safeAddress: "0x0000000000000000000000000000000000000000",
+  value: 428.74,
+  active: [
+    {
+      title: "Bitcoin Up or Down - 15m fast market",
+      slug: "btc-updown-15m-demo",
+      eventSlug: "btc-fast-demo",
+      outcome: "Up",
+      size: 162.5,
+      avgPrice: 0.49,
+      curPrice: 0.56,
+      currentValue: 91.0,
+      cashPnl: 11.38,
+      realizedPnl: 0,
+      percentPnl: 14.29,
+      status: "Open",
+      endDate: "2026-06-04T15:15:00.000Z",
+    },
+    {
+      title: "Solana Up or Down - 5m fast market",
+      slug: "sol-updown-5m-demo",
+      eventSlug: "sol-fast-demo",
+      outcome: "Down",
+      size: 240,
+      avgPrice: 0.52,
+      curPrice: 0.47,
+      currentValue: 112.8,
+      cashPnl: -12.0,
+      realizedPnl: 0,
+      percentPnl: -9.62,
+      status: "Open",
+      endDate: "2026-06-04T15:05:00.000Z",
+    },
+  ],
+  history: [
+    {
+      title: "Ethereum Up or Down - 60m fast market",
+      slug: "eth-updown-1h-demo",
+      eventSlug: "eth-fast-demo",
+      outcome: "Up",
+      size: 310,
+      avgPrice: 0.44,
+      curPrice: 0.71,
+      currentValue: 220.1,
+      cashPnl: 0,
+      realizedPnl: 83.7,
+      percentPnl: 61.36,
+      status: "Closed",
+      endDate: "2026-06-04T13:00:00.000Z",
+    },
+    {
+      title: "XRP Up or Down - 15m fast market",
+      slug: "xrp-updown-15m-demo",
+      eventSlug: "xrp-fast-demo",
+      outcome: "Down",
+      size: 185,
+      avgPrice: 0.57,
+      curPrice: 0.28,
+      currentValue: 51.8,
+      cashPnl: 0,
+      realizedPnl: -53.65,
+      percentPnl: -50.88,
+      status: "Closed",
+      endDate: "2026-06-04T12:15:00.000Z",
+    },
+    {
+      title: "Bitcoin Up or Down - 5m fast market",
+      slug: "btc-updown-5m-demo",
+      eventSlug: "btc-fast-demo",
+      outcome: "Up",
+      size: 95,
+      avgPrice: 0.51,
+      curPrice: 0.63,
+      currentValue: 59.85,
+      cashPnl: 0,
+      realizedPnl: 11.4,
+      percentPnl: 23.53,
+      status: "Closed",
+      endDate: "2026-06-04T11:45:00.000Z",
+    },
+  ],
+  stats: {
+    activeCount: 2,
+    historyCount: 3,
+    wins: 2,
+    losses: 1,
+    winRate: 66.7,
+    totalPnl: 40.83,
+  },
+};
+
 export default function Profile() {
   const { address, isConnected } = useAppKitAccount();
   const [loading, setLoading] = useState(false);
@@ -106,7 +198,11 @@ export default function Profile() {
     getProfileData();
   }, [isConnected, address]);
 
-  const stats = portfolio?.stats;
+  const hasRealPortfolio =
+    Boolean(portfolio?.active.length) || Boolean(portfolio?.history.length);
+  const displayPortfolio =
+    hasRealPortfolio && portfolio ? portfolio : MOCK_PORTFOLIO;
+  const stats = displayPortfolio.stats;
   const totalPnl = stats?.totalPnl ?? 0;
   const shortSafe = safe ? `${safe.slice(0, 6)}...${safe.slice(-4)}` : "--";
 
@@ -147,15 +243,19 @@ export default function Profile() {
             <button
               type="button"
               onClick={handleAvatarClick}
-              className="relative h-20 w-20 shrink-0 overflow-hidden border theme-border bg-[var(--surface-muted)]"
+              className="group relative h-20 w-20 shrink-0 cursor-pointer overflow-hidden border theme-border bg-[var(--surface-muted)] transition hover:border-[var(--accent)]"
+              title="Change avatar"
             >
               <Image
                 src={avatarUrl}
                 alt="avatar"
                 fill
                 sizes="80px"
-                className="object-cover"
+                className="object-cover transition duration-200 group-hover:scale-105 group-hover:brightness-75"
               />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-[11px] font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                Change
+              </span>
             </button>
             <input
               ref={fileInputRef}
@@ -200,7 +300,7 @@ export default function Profile() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Stat label="Portfolio" value={formatUsd(portfolio?.value ?? 0)} />
+            <Stat label="Portfolio" value={formatUsd(displayPortfolio.value)} />
             <Stat
               label="Winrate"
               value={stats?.winRate === null || !stats ? "--" : `${stats.winRate}%`}
@@ -218,8 +318,8 @@ export default function Profile() {
           <Panel title="Trading history">
             {loading ? (
               <EmptyState text="Loading portfolio..." />
-            ) : portfolio?.history.length ? (
-              <PositionList positions={portfolio.history} />
+            ) : displayPortfolio.history.length ? (
+              <PositionList positions={displayPortfolio.history} />
             ) : (
               <EmptyState text="No history for this Safe yet." />
             )}
@@ -228,8 +328,8 @@ export default function Profile() {
           <Panel title="Active markets">
             {loading ? (
               <EmptyState text="Loading active markets..." />
-            ) : portfolio?.active.length ? (
-              <PositionList positions={portfolio.active} compact />
+            ) : displayPortfolio.active.length ? (
+              <PositionList positions={displayPortfolio.active} compact />
             ) : (
               <EmptyState text="No active positions." />
             )}

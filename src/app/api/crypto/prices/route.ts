@@ -31,48 +31,63 @@ export async function GET(req: NextRequest) {
     .filter((asset) => asset in SYMBOLS);
 
   const assets = requestedAssets?.length ? requestedAssets.slice(0, 4) : ["BTC", "ETH"];
-  const symbols = assets.map((asset) => SYMBOLS[asset]);
-  const url = `${BINANCE_TICKER_URL}?symbols=${encodeURIComponent(
-    JSON.stringify(symbols),
-  )}`;
+  try {
+    const coinbasePrices = await fetchCoinbasePrices(assets);
+    if (coinbasePrices.some((price) => price.price !== null)) {
+      return NextResponse.json(
+        {
+          source: "coinbase",
+          prices: coinbasePrices,
+        },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+  } catch {}
 
   try {
+    const symbols = assets.map((asset) => SYMBOLS[asset]);
+    const url = `${BINANCE_TICKER_URL}?symbols=${encodeURIComponent(
+      JSON.stringify(symbols),
+    )}`;
     const res = await fetch(url, { next: { revalidate: 5 } });
 
     if (res.ok) {
       const tickers = (await res.json()) as BinanceTicker[];
       const bySymbol = new Map(tickers.map((ticker) => [ticker.symbol, ticker]));
 
-      return NextResponse.json({
-        source: "binance",
-        prices: assets.map((asset) => {
-          const ticker = bySymbol.get(SYMBOLS[asset]);
-
-          return {
-            asset,
-            price: ticker ? Number(ticker.lastPrice) : null,
-            changePercent: ticker ? Number(ticker.priceChangePercent) : null,
-          };
-        }),
-      });
-    }
-
-    return NextResponse.json({
-      source: "coinbase",
-      prices: await fetchCoinbasePrices(assets),
-    });
-  } catch (e: unknown) {
-    try {
-      return NextResponse.json({
-        source: "coinbase",
-        prices: await fetchCoinbasePrices(assets),
-      });
-    } catch {
       return NextResponse.json(
-        { error: e instanceof Error ? e.message : "Unknown error" },
-        { status: 500 },
+        {
+          source: "binance",
+          prices: assets.map((asset) => {
+            const ticker = bySymbol.get(SYMBOLS[asset]);
+
+            return {
+              asset,
+              price: ticker ? Number(ticker.lastPrice) : null,
+              changePercent: ticker ? Number(ticker.priceChangePercent) : null,
+            };
+          }),
+        },
+        { headers: { "Cache-Control": "no-store" } },
       );
     }
+
+    return NextResponse.json(
+      {
+        source: "none",
+        prices: assets.map((asset) => ({
+          asset,
+          price: null,
+          changePercent: null,
+        })),
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (e: unknown) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Unknown error" },
+      { status: 500 },
+    );
   }
 }
 
@@ -86,7 +101,7 @@ async function fetchCoinbasePrices(assets: string[]) {
 
       const res = await fetch(`${COINBASE_PRODUCT_URL}/${product}/stats`, {
         headers: { "User-Agent": "PolyBook" },
-        next: { revalidate: 5 },
+        cache: "no-store",
       });
 
       if (!res.ok) {
