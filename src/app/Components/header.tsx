@@ -150,12 +150,10 @@ export default function Header() {
             className="object-contain"
           />
           <div className="flex items-baseline gap-3">
-            <span className="text-[21px] font-semibold leading-none">
+            <span className="text-[21px] mr-10 font-semibold leading-none">
               PolyBook
             </span>
-            <span className="hidden border-l theme-border pl-3 text-xs theme-muted xl:inline">
-              scalp terminal
-            </span>
+            
           </div>
         </button>
 

@@ -38,6 +38,17 @@ type OrderbookLevel = {
   size: number;
 };
 
+type OrderSide = "BUY" | "SELL";
+
+type OrderDraft = {
+  source: "Polymarket" | "Binance";
+  side: OrderSide;
+  asset: Asset;
+  label: string;
+  price: number;
+  size: number;
+};
+
 type OrderbookOutcome = "Up" | "Down";
 
 type OrderbookSelection = {
@@ -78,6 +89,35 @@ const POLY_MARKETS_BY_ASSET: OrderbookSelection[] = [
 
 const ORDERBOOK_TIMEFRAMES: Timeframe[] = ["5m", "15m", "1h"];
 const ASSETS: Asset[] = ["BTC", "ETH", "SOL", "XRP"];
+
+function getPriceDecimals(asset: Asset, mode: "poly" | "binance") {
+  if (mode === "poly") return 3;
+  if (asset === "XRP") return 4;
+  return 2;
+}
+
+function formatBookPrice(asset: Asset, price: number, mode: "poly" | "binance") {
+  if (mode === "poly") return `${(price * 100).toFixed(1)}%`;
+  return price.toFixed(getPriceDecimals(asset, mode));
+}
+
+function formatBookSize(size: number, compact = false) {
+  if (!Number.isFinite(size) || size <= 0) return "";
+  if (compact && size >= 1000) return `${(size / 1000).toFixed(1)}K`;
+  return size.toFixed(size >= 100 ? 0 : 2);
+}
+
+function sortBids(levels: OrderbookLevel[]) {
+  return [...levels]
+    .filter((level) => Number.isFinite(level.price) && Number.isFinite(level.size))
+    .sort((a, b) => b.price - a.price);
+}
+
+function sortAsks(levels: OrderbookLevel[]) {
+  return [...levels]
+    .filter((level) => Number.isFinite(level.price) && Number.isFinite(level.size))
+    .sort((a, b) => a.price - b.price);
+}
 
 function WindowFrame({
   title,
@@ -259,6 +299,255 @@ function DraggablePolyChartWindow({
   );
 }
 
+function ScalpOrderbookLadder({
+  asset,
+  mode,
+  bids,
+  asks,
+  loading,
+  error,
+  emptyText,
+  draft,
+  onSelect,
+}: {
+  asset: Asset;
+  mode: "poly" | "binance";
+  bids: OrderbookLevel[];
+  asks: OrderbookLevel[];
+  loading: boolean;
+  error: string | null;
+  emptyText: string;
+  draft: OrderDraft | null;
+  onSelect: (draft: OrderDraft) => void;
+}) {
+  const priceDecimals = getPriceDecimals(asset, mode);
+
+  const rows = useMemo(() => {
+    const levels = new Map<string, { price: number; bidSize: number; askSize: number }>();
+
+    for (const level of bids) {
+      if (!Number.isFinite(level.price) || !Number.isFinite(level.size)) continue;
+      const key = level.price.toFixed(priceDecimals);
+      const row = levels.get(key) ?? {
+        price: Number(key),
+        bidSize: 0,
+        askSize: 0,
+      };
+      row.bidSize += level.size;
+      levels.set(key, row);
+    }
+
+    for (const level of asks) {
+      if (!Number.isFinite(level.price) || !Number.isFinite(level.size)) continue;
+      const key = level.price.toFixed(priceDecimals);
+      const row = levels.get(key) ?? {
+        price: Number(key),
+        bidSize: 0,
+        askSize: 0,
+      };
+      row.askSize += level.size;
+      levels.set(key, row);
+    }
+
+    return [...levels.values()].sort((a, b) => b.price - a.price).slice(0, 84);
+  }, [asks, bids, priceDecimals]);
+
+  const sortedBids = useMemo(() => sortBids(bids), [bids]);
+  const sortedAsks = useMemo(() => sortAsks(asks), [asks]);
+  const bestBid = sortedBids[0]?.price ?? null;
+  const bestAsk = sortedAsks[0]?.price ?? null;
+  const bidLiquidity = sortedBids.reduce((sum, level) => sum + level.size, 0);
+  const askLiquidity = sortedAsks.reduce((sum, level) => sum + level.size, 0);
+  const maxSize = Math.max(
+    1,
+    ...rows.map((row) => Math.max(row.bidSize, row.askSize))
+  );
+  const spread =
+    bestBid !== null && bestAsk !== null ? Math.max(0, bestAsk - bestBid) : null;
+  const mid =
+    bestBid !== null && bestAsk !== null ? (bestBid + bestAsk) / 2 : null;
+
+  const buildDraft = (
+    side: OrderSide,
+    price: number,
+    size: number
+  ): OrderDraft => ({
+    source: mode === "poly" ? "Polymarket" : "Binance",
+    side,
+    asset,
+    label:
+      mode === "poly"
+        ? `${asset} ${side} @ ${formatBookPrice(asset, price, mode)}`
+        : `${asset}/USDT ${side} @ ${formatBookPrice(asset, price, mode)}`,
+    price,
+    size,
+  });
+
+  const renderCell = (
+    row: { price: number; bidSize: number; askSize: number },
+    side: "bid" | "ask"
+  ) => {
+    const size = side === "bid" ? row.bidSize : row.askSize;
+    const active =
+      draft?.price.toFixed(priceDecimals) === row.price.toFixed(priceDecimals) &&
+      ((side === "ask" && draft.side === "BUY") ||
+        (side === "bid" && draft.side === "SELL"));
+    const width = `${Math.min(100, (size / maxSize) * 100)}%`;
+
+    return (
+      <button
+        type="button"
+        disabled={size <= 0}
+        onClick={() =>
+          onSelect(
+            buildDraft(side === "ask" ? "BUY" : "SELL", row.price, size)
+          )
+        }
+        className={`relative h-[22px] overflow-hidden px-2 text-left font-mono text-[11px] transition disabled:cursor-default ${
+          side === "bid"
+            ? "text-green-300 hover:bg-green-500/10"
+            : "text-red-300 hover:bg-red-500/10"
+        } ${active ? "ring-1 ring-sky-400" : ""}`}
+      >
+        {size > 0 && (
+          <span
+            className={`absolute inset-y-0 ${
+              side === "bid"
+                ? "right-0 bg-green-500/20"
+                : "left-0 bg-red-500/20"
+            }`}
+            style={{ width }}
+          />
+        )}
+        <span className="relative z-10 block truncate">
+          {formatBookSize(size, mode === "binance")}
+        </span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden border theme-border bg-[var(--terminal-bg)]">
+      <div className="grid grid-cols-4 border-b theme-border bg-[var(--surface-muted)] text-[10px] uppercase tracking-wide theme-muted">
+        <div className="px-2 py-2">
+          Bid Liq
+          <div className="font-mono text-green-300 normal-case tracking-normal">
+            {formatBookSize(bidLiquidity, true) || "--"}
+          </div>
+        </div>
+        <div className="px-2 py-2">
+          Ask Liq
+          <div className="font-mono text-red-300 normal-case tracking-normal">
+            {formatBookSize(askLiquidity, true) || "--"}
+          </div>
+        </div>
+        <div className="px-2 py-2">
+          Spread
+          <div className="font-mono text-[var(--foreground)] normal-case tracking-normal">
+            {spread === null ? "--" : formatBookPrice(asset, spread, mode)}
+          </div>
+        </div>
+        <div className="px-2 py-2">
+          Mid
+          <div className="font-mono text-sky-300 normal-case tracking-normal">
+            {mid === null ? "--" : formatBookPrice(asset, mid, mode)}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[1fr_84px_1fr] border-b theme-border bg-[var(--surface)] px-1 py-1 font-mono text-[10px] uppercase tracking-wide theme-muted">
+        <span className="px-1 text-green-300">Bid Size</span>
+        <span className="px-1 text-center">Chance</span>
+        <span className="px-1 text-right text-red-300">Ask Size</span>
+      </div>
+
+      {error && (
+        <div className="border-b border-red-500/40 bg-red-500/10 px-2 py-2 text-[11px] text-red-300">
+          {error}
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {rows.length === 0 && !loading ? (
+          <div className="flex h-full items-center justify-center text-xs theme-muted">
+            {emptyText}
+          </div>
+        ) : (
+          rows.map((row) => {
+            const isBestBid = bestBid !== null && row.price === bestBid;
+            const isBestAsk = bestAsk !== null && row.price === bestAsk;
+            const selected =
+              draft?.price.toFixed(priceDecimals) ===
+              row.price.toFixed(priceDecimals);
+
+            return (
+              <div
+                key={row.price.toFixed(priceDecimals)}
+                className={`grid grid-cols-[1fr_84px_1fr] border-b theme-border ${
+                  selected ? "bg-sky-500/10" : ""
+                }`}
+              >
+                {renderCell(row, "bid")}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (row.askSize > 0) {
+                      onSelect(buildDraft("BUY", row.price, row.askSize));
+                      return;
+                    }
+                    if (row.bidSize > 0) {
+                      onSelect(buildDraft("SELL", row.price, row.bidSize));
+                    }
+                  }}
+                  className={`h-[22px] border-x theme-border px-1 text-center font-mono text-[11px] transition hover:bg-[var(--surface-muted)] ${
+                    isBestAsk
+                      ? "bg-red-500/15 text-red-200"
+                      : isBestBid
+                        ? "bg-green-500/15 text-green-200"
+                        : "text-[var(--foreground)]"
+                  }`}
+                >
+                  {formatBookPrice(asset, row.price, mode)}
+                </button>
+                {renderCell(row, "ask")}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="border-t theme-border bg-[var(--surface-muted)] p-2">
+        {draft ? (
+          <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+            <div className="min-w-0">
+              <div
+                className={`font-mono text-xs ${
+                  draft.side === "BUY" ? "text-green-300" : "text-red-300"
+                }`}
+              >
+                {draft.label}
+              </div>
+              <div className="mt-1 text-[10px] theme-muted">
+                Size from book: {formatBookSize(draft.size, true) || "--"}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="border theme-border px-3 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[var(--surface-soft)]"
+            >
+              Open Order
+            </button>
+          </div>
+        ) : (
+          <div className="py-2 text-center text-[11px] theme-muted">
+            Click a bid or ask cell to stage an order
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DraggableOrderbookWindow({
   asset,
   marketId,
@@ -280,6 +569,7 @@ function DraggableOrderbookWindow({
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<OrderbookOutcome>("Up");
   const [slug, setSlug] = useState<string>("");
+  const [draft, setDraft] = useState<OrderDraft | null>(null);
 
   useEffect(() => {
     const fetchOrderbook = async () => {
@@ -329,53 +619,6 @@ function DraggableOrderbookWindow({
     };
   }, [asset, timeframe, outcome]);
 
-  const renderLevels = (
-    side: "bid" | "ask",
-    levels: OrderbookLevel[],
-    emptyText: string
-  ) => (
-    <div className="flex flex-col overflow-hidden border border-zinc-800">
-      <div
-        className={`flex justify-between bg-zinc-900 px-2 py-1 text-[11px] ${
-          side === "bid" ? "text-green-400" : "text-red-400"
-        }`}
-      >
-        <span>{side === "bid" ? "Bids" : "Asks"}</span>
-        <span>Price / Size</span>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        {levels.length === 0 && !loading && (
-          <div className="px-2 py-1 text-[11px] text-zinc-600">{emptyText}</div>
-        )}
-        {levels.map((lvl, idx) => (
-          <button
-            key={`${side}-${idx}`}
-            className={`flex w-full justify-between px-2 py-[3px] text-left text-[11px] ${
-              side === "bid" ? "hover:bg-green-950/60" : "hover:bg-red-950/60"
-            }`}
-            onClick={() => {
-              console.log("[OrderbookWindow] price click", {
-                side,
-                price: lvl.price,
-                size: lvl.size,
-                asset,
-                marketId,
-                timeframe,
-              });
-            }}
-          >
-            <span
-              className={side === "bid" ? "text-green-400" : "text-red-400"}
-            >
-              {lvl.price.toFixed(3)}
-            </span>
-            <span className="text-zinc-400">{lvl.size.toFixed(2)}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
   return (
     <WindowFrame
       title={`Orderbook / ${asset} / ${timeframe}`}
@@ -383,15 +626,15 @@ function DraggableOrderbookWindow({
       zIndex={zIndex}
       initialX={130}
       initialY={170}
-      initialWidth={460}
-      initialHeight={320}
-      minWidth={360}
-      minHeight={260}
+      initialWidth={520}
+      initialHeight={620}
+      minWidth={420}
+      minHeight={420}
       onFocus={onFocus}
       onClose={onClose}
     >
-      <div className="flex h-full flex-col theme-surface p-3 text-xs">
-        <div className="mb-2 flex justify-between gap-3">
+      <div className="flex h-full flex-col gap-2 theme-surface p-2 text-xs">
+        <div className="flex justify-between gap-3">
           <div className="truncate theme-muted" title={slug || marketId}>
             {asset} / {timeframe} / {slug || marketId}
           </div>
@@ -400,16 +643,19 @@ function DraggableOrderbookWindow({
           )}
         </div>
 
-        <div className="mb-2 grid grid-cols-2 border border-zinc-800">
+        <div className="grid grid-cols-2 border theme-border">
           {(["Up", "Down"] as OrderbookOutcome[]).map((option) => (
             <button
               key={option}
               type="button"
-              onClick={() => setOutcome(option)}
+              onClick={() => {
+                setOutcome(option);
+                setDraft(null);
+              }}
               className={`px-2 py-1 text-[11px] transition ${
                 outcome === option
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200"
+                  ? "bg-[var(--surface-soft)] text-[var(--foreground)]"
+                  : "theme-muted hover:bg-[var(--surface-muted)]"
               }`}
             >
               {option}
@@ -417,16 +663,17 @@ function DraggableOrderbookWindow({
           ))}
         </div>
 
-        {error && (
-          <div className="mb-2 max-h-12 overflow-hidden text-[11px] text-red-400">
-            Error loading orderbook: {error}
-          </div>
-        )}
-
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-2">
-          {renderLevels("bid", bids, "No bids")}
-          {renderLevels("ask", asks, "No asks")}
-        </div>
+        <ScalpOrderbookLadder
+          asset={asset}
+          mode="poly"
+          bids={bids}
+          asks={asks}
+          loading={loading}
+          error={error ? `Error loading orderbook: ${error}` : null}
+          emptyText="No Polymarket liquidity"
+          draft={draft}
+          onSelect={setDraft}
+        />
       </div>
     </WindowFrame>
   );
@@ -447,6 +694,7 @@ function DraggableBinanceOrderbookWindow({
   const [asks, setAsks] = useState<OrderbookLevel[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<OrderDraft | null>(null);
   const symbol = `${asset}USDT`;
 
   useEffect(() => {
@@ -497,54 +745,6 @@ function DraggableBinanceOrderbookWindow({
     };
   }, [symbol]);
 
-  const maxSize = Math.max(
-    1,
-    ...bids.slice(0, 30).map((lvl) => lvl.size),
-    ...asks.slice(0, 30).map((lvl) => lvl.size)
-  );
-
-  const renderLevels = (side: "bid" | "ask", levels: OrderbookLevel[]) => (
-    <div className="flex min-h-0 flex-col overflow-hidden border theme-border">
-      <div
-        className={`flex justify-between bg-[var(--surface-muted)] px-2 py-1 text-[11px] ${
-          side === "bid" ? "text-green-400" : "text-red-400"
-        }`}
-      >
-        <span>{side === "bid" ? "Bids" : "Asks"}</span>
-        <span>Price / Size</span>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto font-mono">
-        {levels.slice(0, 60).map((lvl, idx) => {
-          const width = `${Math.min(100, (lvl.size / maxSize) * 100)}%`;
-
-          return (
-            <div
-              key={`${side}-${idx}`}
-              className="relative flex justify-between px-2 py-[3px] text-[11px]"
-            >
-              <span
-                className={`absolute inset-y-0 ${
-                  side === "bid" ? "right-0 bg-green-500/10" : "right-0 bg-red-500/10"
-                }`}
-                style={{ width }}
-              />
-              <span
-                className={`relative z-10 ${
-                  side === "bid" ? "text-green-400" : "text-red-400"
-                }`}
-              >
-                {lvl.price.toFixed(asset === "XRP" ? 4 : 2)}
-              </span>
-              <span className="relative z-10 theme-muted">
-                {lvl.size.toFixed(asset === "BTC" ? 4 : 2)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-
   return (
     <WindowFrame
       title={`Binance Book / ${symbol}`}
@@ -552,27 +752,30 @@ function DraggableBinanceOrderbookWindow({
       zIndex={zIndex}
       initialX={160}
       initialY={190}
-      initialWidth={500}
-      initialHeight={360}
-      minWidth={380}
-      minHeight={280}
+      initialWidth={520}
+      initialHeight={620}
+      minWidth={420}
+      minHeight={420}
       onFocus={onFocus}
       onClose={onClose}
     >
-      <div className="flex h-full flex-col theme-surface p-3 text-xs">
-        <div className="mb-2 flex items-center justify-between">
+      <div className="flex h-full flex-col gap-2 theme-surface p-2 text-xs">
+        <div className="flex items-center justify-between">
           <div className="font-mono theme-muted">{symbol}</div>
           {loading && <div className="text-[10px] theme-muted">updating...</div>}
         </div>
-        {error && (
-          <div className="mb-2 max-h-12 overflow-hidden text-[11px] text-red-400">
-            Error loading Binance book: {error}
-          </div>
-        )}
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-2">
-          {renderLevels("bid", bids)}
-          {renderLevels("ask", asks)}
-        </div>
+
+        <ScalpOrderbookLadder
+          asset={asset}
+          mode="binance"
+          bids={bids}
+          asks={asks}
+          loading={loading}
+          error={error ? `Error loading Binance book: ${error}` : null}
+          emptyText="No Binance depth"
+          draft={draft}
+          onSelect={setDraft}
+        />
       </div>
     </WindowFrame>
   );
