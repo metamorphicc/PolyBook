@@ -1,13 +1,25 @@
 import {
   ClobClient,
+  SignatureTypeV2,
   type ApiKeyCreds,
+  type ClobClientOptions,
 } from "@polymarket/clob-client-v2";
+import type { ethers } from "ethers";
 
 const HOST = "https://clob.polymarket.com";
 const CHAIN = 137;
 
-export async function initPolymarketClient(signer: any, proxyAddress: string) {
+type ApiKeyCapableClient = ClobClient & {
+  createOrDeriveApiKey?: () => Promise<ApiKeyCreds>;
+  createApiKey: () => Promise<ApiKeyCreds>;
+};
+
+export async function initPolymarketClient(
+  signer: ethers.Signer,
+  proxyAddress: string,
+) {
   const STORAGE_KEY = `poly_creds_${proxyAddress}`;
+  const clobSigner = signer as unknown as ClobClientOptions["signer"];
 
   const savedCreds =
     typeof window !== "undefined"
@@ -21,8 +33,10 @@ export async function initPolymarketClient(signer: any, proxyAddress: string) {
       const client = new ClobClient({
         host: HOST,
         chain: CHAIN,
-        signer,
+        signer: clobSigner,
         creds,
+        signatureType: SignatureTypeV2.POLY_GNOSIS_SAFE,
+        funderAddress: proxyAddress,
       });
 
       return client;
@@ -35,15 +49,17 @@ export async function initPolymarketClient(signer: any, proxyAddress: string) {
   const tempClient = new ClobClient({
     host: HOST,
     chain: CHAIN,
-    signer,
-  });
+    signer: clobSigner,
+    signatureType: SignatureTypeV2.POLY_GNOSIS_SAFE,
+    funderAddress: proxyAddress,
+  }) as ApiKeyCapableClient;
 
   let apiCreds: ApiKeyCreds;
   try {
-    if (typeof (tempClient as any).createOrDeriveApiKey === "function") {
-      apiCreds = await (tempClient as any).createOrDeriveApiKey();
+    if (typeof tempClient.createOrDeriveApiKey === "function") {
+      apiCreds = await tempClient.createOrDeriveApiKey();
     } else {
-      apiCreds = await (tempClient as any).createApiKey();
+      apiCreds = await tempClient.createApiKey();
     }
   } catch (e) {
     console.error("failed to create/derive api key", e);
@@ -58,8 +74,10 @@ export async function initPolymarketClient(signer: any, proxyAddress: string) {
   const client = new ClobClient({
     host: HOST,
     chain: CHAIN,
-    signer,
+    signer: clobSigner,
     creds: apiCreds,
+    signatureType: SignatureTypeV2.POLY_GNOSIS_SAFE,
+    funderAddress: proxyAddress,
   });
 
   return client;

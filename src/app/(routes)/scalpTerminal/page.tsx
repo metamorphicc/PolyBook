@@ -3,8 +3,17 @@
 import Header from "@/app/Components/header";
 import PolymarketPriceChart from "@/app/Components/PolymarketPriceChart";
 import PriceChart from "@/app/Components/priceChart";
+import {
+  readTradingSettings,
+  type TradingSettings,
+} from "@/app/Components/tradingSettings";
+import { initPolymarketClient } from "@/app/Components/verifyUser";
+import { useEthersSigner } from "@/app/Components/CustomConnect";
+import { OrderType, Side, type TickSize } from "@polymarket/clob-client-v2";
+import { useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccount, useSwitchChain } from "wagmi";
 
 type Timeframe = "5m" | "15m" | "1h";
 type Asset = "BTC" | "ETH" | "SOL" | "XRP";
@@ -47,6 +56,14 @@ type OrderDraft = {
   label: string;
   price: number;
   size: number;
+  tokenId?: string;
+  tickSize?: TickSize;
+};
+
+type PlaceOrderRequest = {
+  draft: OrderDraft;
+  size: number;
+  postOnly?: boolean;
 };
 
 type OrderbookOutcome = "Up" | "Down";
@@ -309,6 +326,10 @@ function ScalpOrderbookLadder({
   emptyText,
   draft,
   onSelect,
+  tokenId,
+  tickSize,
+  onPlaceOrder,
+  settings,
 }: {
   asset: Asset;
   mode: "poly" | "binance";
@@ -319,8 +340,23 @@ function ScalpOrderbookLadder({
   emptyText: string;
   draft: OrderDraft | null;
   onSelect: (draft: OrderDraft) => void;
+  tokenId?: string;
+  tickSize?: TickSize;
+  onPlaceOrder?: (request: PlaceOrderRequest) => Promise<unknown>;
+  settings: TradingSettings;
 }) {
   const priceDecimals = getPriceDecimals(asset, mode);
+  const [orderSize, setOrderSize] = useState(settings.defaultOrderSize);
+  const [submitting, setSubmitting] = useState(false);
+  const [orderStatus, setOrderStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setOrderSize(settings.defaultOrderSize);
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [settings.defaultOrderSize]);
 
   const rows = useMemo(() => {
     const levels = new Map<string, { price: number; bidSize: number; askSize: number }>();
@@ -358,6 +394,8 @@ function ScalpOrderbookLadder({
   const bestAsk = sortedAsks[0]?.price ?? null;
   const bidLiquidity = sortedBids.reduce((sum, level) => sum + level.size, 0);
   const askLiquidity = sortedAsks.reduce((sum, level) => sum + level.size, 0);
+  const isOneClickMode =
+    mode === "poly" && settings.oneClickTrading && !settings.requireConfirm;
   const maxSize = Math.max(
     1,
     ...rows.map((row) => Math.max(row.bidSize, row.askSize))
@@ -381,7 +419,87 @@ function ScalpOrderbookLadder({
         : `${asset}/USDT ${side} @ ${formatBookPrice(asset, price, mode)}`,
     price,
     size,
+    tokenId,
+    tickSize,
   });
+
+  const submitOrder = async (
+    targetDraft = draft,
+    sizeValue = isOneClickMode ? settings.defaultOrderSize : orderSize,
+  ) => {
+    if (!targetDraft || !onPlaceOrder) return;
+
+    const parsedSize = Number(sizeValue);
+    if (!Number.isFinite(parsedSize) || parsedSize <= 0) {
+      setOrderStatus("Enter a valid size.");
+      return;
+    }
+
+    const maxOrderSize = Number(settings.maxOrderSize);
+    if (
+      Number.isFinite(maxOrderSize) &&
+      maxOrderSize > 0 &&
+      parsedSize > maxOrderSize
+    ) {
+      setOrderStatus(`Order size exceeds preset max: ${settings.maxOrderSize}.`);
+      return;
+    }
+
+    const maxSpreadPercent = Number(settings.maxSpreadPercent);
+    const spreadPercent = mode === "poly" && spread !== null ? spread * 100 : null;
+    if (
+      spreadPercent !== null &&
+      Number.isFinite(maxSpreadPercent) &&
+      maxSpreadPercent >= 0 &&
+      spreadPercent > maxSpreadPercent
+    ) {
+      setOrderStatus(
+        `Spread guard: ${spreadPercent.toFixed(2)}% > ${settings.maxSpreadPercent}%.`,
+      );
+      return;
+    }
+
+    const minLiquidity = Number(settings.minBookLiquidity);
+    const sideLiquidity =
+      targetDraft.side === "BUY" ? askLiquidity : bidLiquidity;
+    if (
+      mode === "poly" &&
+      Number.isFinite(minLiquidity) &&
+      minLiquidity > 0 &&
+      sideLiquidity < minLiquidity
+    ) {
+      setOrderStatus(
+        `Liquidity guard: ${formatBookSize(sideLiquidity, true) || "0"} < ${settings.minBookLiquidity}.`,
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    setOrderStatus(
+      isOneClickMode ? `Sending ${targetDraft.label} / ${parsedSize}` : null,
+    );
+    try {
+      const response = await onPlaceOrder({
+        draft: targetDraft,
+        size: parsedSize,
+        postOnly: settings.postOnly,
+      });
+      const responseText =
+        typeof response === "string" ? response : JSON.stringify(response);
+      setOrderStatus(`Order sent: ${responseText.slice(0, 140)}`);
+    } catch (e) {
+      setOrderStatus(e instanceof Error ? e.message : "Order failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSelectDraft = async (nextDraft: OrderDraft) => {
+    onSelect(nextDraft);
+
+    if (!isOneClickMode || !onPlaceOrder || submitting) return;
+    await submitOrder(nextDraft, settings.defaultOrderSize);
+  };
 
   const renderCell = (
     row: { price: number; bidSize: number; askSize: number },
@@ -397,12 +515,12 @@ function ScalpOrderbookLadder({
     return (
       <button
         type="button"
-        disabled={size <= 0}
-        onClick={() =>
-          onSelect(
+        disabled={size <= 0 || (isOneClickMode && submitting)}
+        onClick={() => {
+          void handleSelectDraft(
             buildDraft(side === "ask" ? "BUY" : "SELL", row.price, size)
-          )
-        }
+          );
+        }}
         className={`relative h-[22px] overflow-hidden px-2 text-left font-mono text-[11px] transition disabled:cursor-default ${
           side === "bid"
             ? "text-green-300 hover:bg-green-500/10"
@@ -492,11 +610,15 @@ function ScalpOrderbookLadder({
                   type="button"
                   onClick={() => {
                     if (row.askSize > 0) {
-                      onSelect(buildDraft("BUY", row.price, row.askSize));
+                      void handleSelectDraft(
+                        buildDraft("BUY", row.price, row.askSize)
+                      );
                       return;
                     }
                     if (row.bidSize > 0) {
-                      onSelect(buildDraft("SELL", row.price, row.bidSize));
+                      void handleSelectDraft(
+                        buildDraft("SELL", row.price, row.bidSize)
+                      );
                     }
                   }}
                   className={`h-[22px] border-x theme-border px-1 text-center font-mono text-[11px] transition hover:bg-[var(--surface-muted)] ${
@@ -517,7 +639,34 @@ function ScalpOrderbookLadder({
       </div>
 
       <div className="border-t theme-border bg-[var(--surface-muted)] p-2">
-        {draft ? (
+        {isOneClickMode ? (
+          <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+            <div className="min-w-0">
+              <div className="font-mono text-xs text-[var(--foreground)]">
+                One-click armed / {settings.defaultOrderSize} pUSD
+              </div>
+              <div className="mt-1 truncate text-[10px] theme-muted">
+                {draft
+                  ? `Last: ${draft.label}`
+                  : "Click bid/ask liquidity to send immediately"}
+              </div>
+              {orderStatus && (
+                <div className="mt-2 max-h-10 overflow-hidden text-[10px] theme-muted">
+                  {orderStatus}
+                </div>
+              )}
+            </div>
+            <div
+              className={`border px-2 py-1 text-[10px] ${
+                submitting
+                  ? "border-sky-500/50 text-sky-300"
+                  : "theme-border theme-muted"
+              }`}
+            >
+              {submitting ? "sending" : settings.postOnly ? "post-only" : "live"}
+            </div>
+          </div>
+        ) : draft ? (
           <div className="grid grid-cols-[1fr_auto] items-center gap-2">
             <div className="min-w-0">
               <div
@@ -530,17 +679,58 @@ function ScalpOrderbookLadder({
               <div className="mt-1 text-[10px] theme-muted">
                 Size from book: {formatBookSize(draft.size, true) || "--"}
               </div>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[10px] theme-muted">Order size</span>
+                <input
+                  value={orderSize}
+                  onChange={(event) => setOrderSize(event.target.value)}
+                  className="w-20 border theme-border bg-[var(--terminal-bg)] px-2 py-1 font-mono text-[11px] text-[var(--foreground)] outline-none focus:border-[var(--accent)]"
+                  inputMode="decimal"
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {settings.quickSizes.map((size, index) => (
+                  <button
+                    key={`${size}-${index}`}
+                    type="button"
+                    onClick={() => setOrderSize(size)}
+                    className="border theme-border px-2 py-1 font-mono text-[10px] text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[var(--surface-soft)]"
+                  >
+                    {size}
+                  </button>
+                ))}
+                {settings.postOnly && (
+                  <span className="border border-sky-500/40 px-2 py-1 text-[10px] text-sky-300">
+                    post-only
+                  </span>
+                )}
+              </div>
+              {orderStatus && (
+                <div className="mt-2 max-h-10 overflow-hidden text-[10px] theme-muted">
+                  {orderStatus}
+                </div>
+              )}
             </div>
             <button
               type="button"
-              className="border theme-border px-3 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[var(--surface-soft)]"
+              disabled={!onPlaceOrder || submitting || mode !== "poly"}
+              onClick={() => {
+                void submitOrder();
+              }}
+              className="border theme-border px-3 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Open Order
+              {mode === "poly"
+                ? submitting
+                  ? "Sending..."
+                  : "Open Order"
+                : "Reference"}
             </button>
           </div>
         ) : (
           <div className="py-2 text-center text-[11px] theme-muted">
-            Click a bid or ask cell to stage an order
+            {mode === "poly"
+              ? "Click a bid or ask cell to stage an order"
+              : "Binance book is reference-only"}
           </div>
         )}
       </div>
@@ -554,14 +744,18 @@ function DraggableOrderbookWindow({
   timeframe,
   zIndex,
   onFocus,
+  onPlaceOrder,
   onClose,
+  settings,
 }: {
   asset: Asset;
   marketId: string;
   timeframe: Timeframe;
   zIndex: number;
   onFocus: () => void;
+  onPlaceOrder: (request: PlaceOrderRequest) => Promise<unknown>;
   onClose: () => void;
+  settings: TradingSettings;
 }) {
   const [bids, setBids] = useState<OrderbookLevel[]>([]);
   const [asks, setAsks] = useState<OrderbookLevel[]>([]);
@@ -570,6 +764,8 @@ function DraggableOrderbookWindow({
   const [outcome, setOutcome] = useState<OrderbookOutcome>("Up");
   const [slug, setSlug] = useState<string>("");
   const [draft, setDraft] = useState<OrderDraft | null>(null);
+  const [tokenId, setTokenId] = useState<string>("");
+  const [tickSize, setTickSize] = useState<TickSize>("0.001");
 
   useEffect(() => {
     const fetchOrderbook = async () => {
@@ -589,6 +785,8 @@ function DraggableOrderbookWindow({
 
         const data = await res.json();
         setSlug(String(data.slug ?? ""));
+        setTokenId(String(data.tokenId ?? ""));
+        setTickSize(String(data.tickSize ?? "0.001") as TickSize);
         const mappedBids: OrderbookLevel[] = (data.bids ?? []).map(
           (lvl: { price: string | number; size: string | number }) => ({
             price: Number(lvl.price),
@@ -673,6 +871,10 @@ function DraggableOrderbookWindow({
           emptyText="No Polymarket liquidity"
           draft={draft}
           onSelect={setDraft}
+          tokenId={tokenId}
+          tickSize={tickSize}
+          onPlaceOrder={onPlaceOrder}
+          settings={settings}
         />
       </div>
     </WindowFrame>
@@ -684,11 +886,13 @@ function DraggableBinanceOrderbookWindow({
   zIndex,
   onFocus,
   onClose,
+  settings,
 }: {
   asset: Asset;
   zIndex: number;
   onFocus: () => void;
   onClose: () => void;
+  settings: TradingSettings;
 }) {
   const [bids, setBids] = useState<OrderbookLevel[]>([]);
   const [asks, setAsks] = useState<OrderbookLevel[]>([]);
@@ -775,6 +979,7 @@ function DraggableBinanceOrderbookWindow({
           emptyText="No Binance depth"
           draft={draft}
           onSelect={setDraft}
+          settings={settings}
         />
       </div>
     </WindowFrame>
@@ -958,6 +1163,10 @@ function OrderbookSearchModal({
 }
 
 export default function ScalpTerminal() {
+  const signer = useEthersSigner();
+  const { address, isConnected } = useAppKitAccount();
+  const { chainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isOrderbookSearchOpen, setIsOrderbookSearchOpen] = useState(false);
   const [isBinanceBookSearchOpen, setIsBinanceBookSearchOpen] =
@@ -975,6 +1184,56 @@ export default function ScalpTerminal() {
   );
   const [nextId, setNextId] = useState(1);
   const [activeWindowId, setActiveWindowId] = useState<number | null>(null);
+  const [safeAddress, setSafeAddress] = useState<string | null>(null);
+  const [tradingSettings, setTradingSettings] = useState<TradingSettings>(() =>
+    readTradingSettings(),
+  );
+
+  useEffect(() => {
+    if (!isConnected || !address) {
+      window.setTimeout(() => setSafeAddress(null), 0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSafe = async () => {
+      try {
+        const res = await fetch(`/api/user/safe?address=${address}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) {
+          setSafeAddress((data.safeAddress as string | null) ?? null);
+        }
+      } catch (e) {
+        console.error("[ScalpTerminal] failed to load safe:", e);
+      }
+    };
+
+    loadSafe();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address, isConnected]);
+
+  useEffect(() => {
+    const syncSettings = () => setTradingSettings(readTradingSettings());
+
+    syncSettings();
+    window.addEventListener("storage", syncSettings);
+    window.addEventListener("polybook:trading-settings-updated", syncSettings);
+
+    return () => {
+      window.removeEventListener("storage", syncSettings);
+      window.removeEventListener(
+        "polybook:trading-settings-updated",
+        syncSettings,
+      );
+    };
+  }, []);
 
   const openChartForSymbol = (symbol: string) => {
     const id = nextId;
@@ -988,6 +1247,14 @@ export default function ScalpTerminal() {
     marketId: string;
     timeframe: Timeframe;
   }) => {
+    if (
+      !tradingSettings.allowedAssets[params.asset] ||
+      !tradingSettings.allowedTimeframes[params.timeframe]
+    ) {
+      window.alert("This market is disabled in Profile > Position settings.");
+      return;
+    }
+
     const id = nextId;
     setOrderbookWindows((prev) => [...prev, { id, ...params }]);
     setActiveWindowId(id);
@@ -995,6 +1262,11 @@ export default function ScalpTerminal() {
   };
 
   const openBinanceOrderbookWindow = (asset: Asset) => {
+    if (!tradingSettings.allowedAssets[asset]) {
+      window.alert("This asset is disabled in Profile > Position settings.");
+      return;
+    }
+
     const id = nextId;
     setBinanceOrderbookWindows((prev) => [...prev, { id, asset }]);
     setActiveWindowId(id);
@@ -1006,6 +1278,14 @@ export default function ScalpTerminal() {
     marketId: string;
     timeframe: Timeframe;
   }) => {
+    if (
+      !tradingSettings.allowedAssets[params.asset] ||
+      !tradingSettings.allowedTimeframes[params.timeframe]
+    ) {
+      window.alert("This market is disabled in Profile > Position settings.");
+      return;
+    }
+
     const id = nextId;
     setPolyChartWindows((prev) => [...prev, { id, ...params }]);
     setActiveWindowId(id);
@@ -1013,6 +1293,49 @@ export default function ScalpTerminal() {
   };
 
   const getWindowZIndex = (id: number) => (id === activeWindowId ? 45 : 35);
+
+  const placePolymarketOrder = async ({
+    draft,
+    size,
+    postOnly,
+  }: PlaceOrderRequest) => {
+    if (!signer || !address || !isConnected) {
+      throw new Error("Connect wallet before trading.");
+    }
+
+    if (!safeAddress) {
+      throw new Error("Safe address is not ready yet.");
+    }
+
+    if (!draft.tokenId) {
+      throw new Error("Missing Polymarket token id for this order.");
+    }
+
+    if (chainId !== 137) {
+      await switchChainAsync({ chainId: 137 });
+    }
+
+    const connectedSigner = await signer.getAddress();
+    if (connectedSigner.toLowerCase() !== address.toLowerCase()) {
+      throw new Error("Connected wallet changed. Reconnect wallet.");
+    }
+
+    const client = await initPolymarketClient(signer, safeAddress);
+    const side = draft.side === "BUY" ? Side.BUY : Side.SELL;
+    const price = Number(draft.price.toFixed(3));
+
+    return client.createAndPostOrder(
+      {
+        tokenID: draft.tokenId,
+        price,
+        side,
+        size,
+      },
+      { tickSize: draft.tickSize ?? "0.001" },
+      OrderType.GTC,
+      postOnly ?? tradingSettings.postOnly,
+    );
+  };
 
   const isEmpty =
     chartWindows.length === 0 &&
@@ -1178,6 +1501,7 @@ export default function ScalpTerminal() {
           asset={window.asset}
           zIndex={getWindowZIndex(window.id)}
           onFocus={() => setActiveWindowId(window.id)}
+          settings={tradingSettings}
           onClose={() =>
             setBinanceOrderbookWindows((prev) =>
               prev.filter((orderbook) => orderbook.id !== window.id)
@@ -1209,6 +1533,8 @@ export default function ScalpTerminal() {
           timeframe={window.timeframe}
           zIndex={getWindowZIndex(window.id)}
           onFocus={() => setActiveWindowId(window.id)}
+          onPlaceOrder={placePolymarketOrder}
+          settings={tradingSettings}
           onClose={() =>
             setOrderbookWindows((prev) =>
               prev.filter((orderbook) => orderbook.id !== window.id)

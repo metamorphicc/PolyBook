@@ -8,24 +8,14 @@ type PriceChartProps = {
   symbol: string;
 };
 
-type BinanceCandle = [
-  number,
-  string,
-  string,
-  string,
-  string,
-  string,
-  number,
-  string,
-  number,
-  string,
-  string,
-  string,
-];
-
-const BINANCE_HISTORY_START_MS = Date.UTC(2025, 0, 1);
-const BINANCE_INTERVAL_MS = 60 * 60 * 1000;
-const MAX_BINANCE_PAGES = 30;
+type PriceCandle = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
 
 export default function PriceChart({ symbol }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -89,49 +79,29 @@ export default function PriceChart({ symbol }: PriceChartProps) {
     });
 
     const fetchData = async () => {
-      const candlesRaw: BinanceCandle[] = [];
-      let startTime = BINANCE_HISTORY_START_MS;
-      const endTime = Date.now();
+      const res = await fetch(`/api/crypto/candles?symbol=${binanceSymbol}`, {
+        cache: "no-store",
+      });
 
-      for (let page = 0; page < MAX_BINANCE_PAGES && startTime < endTime; page += 1) {
-        const url = new URL("https://api.binance.com/api/v3/klines");
-        url.searchParams.set("symbol", binanceSymbol);
-        url.searchParams.set("interval", "1h");
-        url.searchParams.set("limit", "1000");
-        url.searchParams.set("startTime", String(startTime));
-        url.searchParams.set("endTime", String(endTime));
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
 
-        const res = await fetch(url);
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const pageCandles = (await res.json()) as BinanceCandle[];
-        if (pageCandles.length === 0) break;
-
-        candlesRaw.push(...pageCandles);
-        const lastOpenTime = Number(pageCandles[pageCandles.length - 1][0]);
-        startTime = lastOpenTime + BINANCE_INTERVAL_MS;
-
-        if (pageCandles.length < 1000) break;
-      }
+      const data = (await res.json()) as { candles?: PriceCandle[] };
+      const candlesRaw = data.candles ?? [];
 
       const candles = candlesRaw.map((candle) => ({
-        time: Math.floor(Number(candle[0]) / 1000) as UTCTimestamp,
-        open: Number(candle[1]),
-        high: Number(candle[2]),
-        low: Number(candle[3]),
-        close: Number(candle[4]),
+        time: candle.time as UTCTimestamp,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
       }));
 
       const volumes = candlesRaw.map((candle) => {
-        const open = Number(candle[1]);
-        const close = Number(candle[4]);
-
         return {
-          time: Math.floor(Number(candle[0]) / 1000) as UTCTimestamp,
-          value: Number(candle[5]),
+          time: candle.time as UTCTimestamp,
+          value: candle.volume,
           color:
-            close >= open
+            candle.close >= candle.open
               ? "rgba(0,181,156,0.42)"
               : "rgba(255,63,85,0.42)",
         };
