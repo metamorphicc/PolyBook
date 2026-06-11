@@ -12,7 +12,7 @@ import { useEthersSigner } from "@/app/Components/CustomConnect";
 import { OrderType, Side, type TickSize } from "@polymarket/clob-client-v2";
 import { useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
 
 type Timeframe = "5m" | "15m" | "1h";
@@ -20,27 +20,55 @@ type Asset = "BTC" | "ETH" | "SOL" | "XRP";
 
 type ChartWindow = {
   id: number;
+  tabId: number;
   symbol: string;
+  frame?: WindowFrameState;
 };
 
 type OrderbookWindow = {
   id: number;
+  tabId: number;
   asset: Asset;
   marketId: string;
   timeframe: Timeframe;
+  frame?: WindowFrameState;
 };
 
 type BinanceOrderbookWindow = {
   id: number;
+  tabId: number;
   asset: Asset;
+  frame?: WindowFrameState;
 };
 
 type PolyChartWindow = {
   id: number;
+  tabId: number;
   asset: Asset;
   marketId: string;
   timeframe: Timeframe;
+  frame?: WindowFrameState;
 };
+
+type WorkspaceTab = {
+  id: number;
+  name: string;
+};
+
+type WorkspaceBounds = {
+  width: number;
+  height: number;
+};
+
+type WindowFrameState = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pinned: boolean;
+};
+
+type SnapSlot = "tl" | "tr" | "bl" | "br" | "left" | "right" | "full";
 
 type OrderbookLevel = {
   price: number;
@@ -83,6 +111,9 @@ type WindowFrameProps = {
   initialHeight: number;
   minWidth: number;
   minHeight: number;
+  bounds: WorkspaceBounds;
+  frame?: WindowFrameState;
+  onFrameChange: (frame: WindowFrameState) => void;
   onFocus: () => void;
   onClose: () => void;
   children: React.ReactNode;
@@ -106,6 +137,10 @@ const POLY_MARKETS_BY_ASSET: OrderbookSelection[] = [
 
 const ORDERBOOK_TIMEFRAMES: Timeframe[] = ["5m", "15m", "1h"];
 const ASSETS: Asset[] = ["BTC", "ETH", "SOL", "XRP"];
+
+function getDefaultTabName(id: number) {
+  return `Setup ${id}`;
+}
 
 function getPriceDecimals(asset: Asset, mode: "poly" | "binance") {
   if (mode === "poly") return 3;
@@ -146,21 +181,136 @@ function WindowFrame({
   initialHeight,
   minWidth,
   minHeight,
+  bounds,
+  frame,
+  onFrameChange,
   onFocus,
   onClose,
   children,
 }: WindowFrameProps) {
-  const [pos, setPos] = useState({ x: initialX, y: initialY });
-  const [size, setSize] = useState({
+  const initialFrame = frame ?? {
+    x: initialX,
+    y: initialY,
     width: initialWidth,
     height: initialHeight,
+    pinned: false,
+  };
+  const [pos, setPos] = useState({ x: initialFrame.x, y: initialFrame.y });
+  const [size, setSize] = useState({
+    width: initialFrame.width,
+    height: initialFrame.height,
   });
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [restoreFrame, setRestoreFrame] = useState<{
+    pos: { x: number; y: number };
+    size: { width: number; height: number };
+  } | null>(null);
+  const [pinned, setPinned] = useState(initialFrame.pinned);
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0 });
 
+  const saveFrame = useCallback(
+    (nextPos = pos, nextSize = size, nextPinned = pinned) => {
+      onFrameChange({
+        x: nextPos.x,
+        y: nextPos.y,
+        width: nextSize.width,
+        height: nextSize.height,
+        pinned: nextPinned,
+      });
+    },
+    [onFrameChange, pinned, pos, size],
+  );
+
+  const clampFrame = (
+    nextPos: { x: number; y: number },
+    nextSize = size,
+  ) => {
+    const maxX = Math.max(0, bounds.width - nextSize.width);
+    const maxY = Math.max(0, bounds.height - nextSize.height);
+
+    return {
+      x: Math.min(Math.max(0, nextPos.x), maxX),
+      y: Math.min(Math.max(0, nextPos.y), maxY),
+    };
+  };
+
+  const getSnapFrame = (slot: SnapSlot) => {
+    const gap = 8;
+    const availableWidth = Math.max(minWidth, bounds.width - gap * 2);
+    const availableHeight = Math.max(minHeight, bounds.height - gap * 2);
+    const halfWidth = Math.max(minWidth, Math.floor((bounds.width - gap * 3) / 2));
+    const halfHeight = Math.max(
+      minHeight,
+      Math.floor((bounds.height - gap * 3) / 2),
+    );
+
+    if (slot === "full") {
+      return {
+        pos: { x: gap, y: gap },
+        size: { width: availableWidth, height: availableHeight },
+      };
+    }
+
+    if (slot === "left" || slot === "right") {
+      return {
+        pos: {
+          x: slot === "left" ? gap : Math.max(gap, bounds.width - halfWidth - gap),
+          y: gap,
+        },
+        size: { width: halfWidth, height: availableHeight },
+      };
+    }
+
+    const isRight = slot === "tr" || slot === "br";
+    const isBottom = slot === "bl" || slot === "br";
+
+    return {
+      pos: {
+        x: isRight ? Math.max(gap, bounds.width - halfWidth - gap) : gap,
+        y: isBottom ? Math.max(gap, bounds.height - halfHeight - gap) : gap,
+      },
+      size: { width: halfWidth, height: halfHeight },
+    };
+  };
+
+  const applySnap = (slot: SnapSlot) => {
+    if (pinned) return;
+    onFocus();
+    setRestoreFrame({ pos, size });
+    const frame = getSnapFrame(slot);
+    setSize(frame.size);
+    setPos(clampFrame(frame.pos, frame.size));
+    saveFrame(clampFrame(frame.pos, frame.size), frame.size);
+  };
+
+  const toggleFull = () => {
+    if (pinned) return;
+    onFocus();
+
+    if (restoreFrame) {
+      setSize(restoreFrame.size);
+      setPos(clampFrame(restoreFrame.pos, restoreFrame.size));
+      saveFrame(clampFrame(restoreFrame.pos, restoreFrame.size), restoreFrame.size);
+      setRestoreFrame(null);
+      return;
+    }
+
+    setRestoreFrame({ pos, size });
+    const frame = getSnapFrame("full");
+    setSize(frame.size);
+    setPos(clampFrame(frame.pos, frame.size));
+    saveFrame(clampFrame(frame.pos, frame.size), frame.size);
+  };
+
   const handleMouseDownHeader = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    if (pinned) return;
+    onFocus();
+    if (restoreFrame) {
+      setRestoreFrame(null);
+    }
     setDragging(true);
     setOffset({
       x: e.clientX - pos.x,
@@ -170,6 +320,7 @@ function WindowFrame({
 
   const handleResizeMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (pinned) return;
     setResizing(true);
     resizeStart.current = {
       x: e.clientX,
@@ -184,19 +335,51 @@ function WindowFrame({
 
     const handleMouseMove = (e: MouseEvent) => {
       if (dragging) {
+        const nextX = e.clientX - offset.x;
+        const nextY = e.clientY - offset.y;
         setPos({
-          x: e.clientX - offset.x,
-          y: Math.max(88, e.clientY - offset.y),
+          x: Math.min(
+            Math.max(0, nextX),
+            Math.max(0, bounds.width - size.width),
+          ),
+          y: Math.min(
+            Math.max(0, nextY),
+            Math.max(0, bounds.height - size.height),
+          ),
         });
+        saveFrame(
+          {
+            x: Math.min(
+              Math.max(0, nextX),
+              Math.max(0, bounds.width - size.width),
+            ),
+            y: Math.min(
+              Math.max(0, nextY),
+              Math.max(0, bounds.height - size.height),
+            ),
+          },
+          size,
+        );
         return;
       }
 
       const dx = e.clientX - resizeStart.current.x;
       const dy = e.clientY - resizeStart.current.y;
+      const nextSize = {
+        width: Math.min(
+          Math.max(minWidth, resizeStart.current.width + dx),
+          Math.max(minWidth, bounds.width - pos.x),
+        ),
+        height: Math.min(
+          Math.max(minHeight, resizeStart.current.height + dy),
+          Math.max(minHeight, bounds.height - pos.y),
+        ),
+      };
       setSize({
-        width: Math.max(minWidth, resizeStart.current.width + dx),
-        height: Math.max(minHeight, resizeStart.current.height + dy),
+        width: nextSize.width,
+        height: nextSize.height,
       });
+      saveFrame(pos, nextSize);
     };
 
     const handleMouseUp = () => {
@@ -211,22 +394,55 @@ function WindowFrame({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [dragging, resizing, offset, minWidth, minHeight]);
+  }, [
+    bounds,
+    dragging,
+    resizing,
+    offset,
+    minWidth,
+    minHeight,
+    pos,
+    saveFrame,
+    size,
+  ]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setSize((current) => ({
+        width: Math.min(current.width, Math.max(minWidth, bounds.width)),
+        height: Math.min(current.height, Math.max(minHeight, bounds.height)),
+      }));
+      setPos((current) => ({
+        x: Math.min(
+          Math.max(0, current.x),
+          Math.max(0, bounds.width - minWidth),
+        ),
+        y: Math.min(
+          Math.max(0, current.y),
+          Math.max(0, bounds.height - minHeight),
+        ),
+      }));
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [bounds.height, bounds.width, minHeight, minWidth]);
 
   return (
     <div
-      className="fixed overflow-hidden border theme-border theme-surface shadow-2xl"
+      className="absolute overflow-hidden border theme-border theme-surface shadow-2xl"
       onMouseDownCapture={onFocus}
       style={{
         left: pos.x,
         top: pos.y,
         width: size.width,
         height: size.height,
-        zIndex,
+        zIndex: pinned ? 90 : zIndex,
       }}
     >
       <div
-        className={`flex h-8 cursor-move select-none items-center justify-between px-3 text-xs text-white ${
+        className={`flex h-8 select-none items-center justify-between px-3 text-xs text-white ${
+          pinned ? "cursor-default" : "cursor-move"
+        } ${
           accent === "book"
             ? "bg-[var(--surface)]"
             : "bg-[var(--surface-muted)]"
@@ -234,20 +450,69 @@ function WindowFrame({
         onMouseDown={handleMouseDownHeader}
       >
         <span className="truncate">{title}</span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-zinc-300 hover:text-white"
-          aria-label="Close window"
-        >
-          x
-        </button>
+        <div className="flex items-center gap-1">
+          {([
+            ["tl", "TL"],
+            ["tr", "TR"],
+            ["bl", "BL"],
+            ["br", "BR"],
+            ["left", "L"],
+            ["right", "R"],
+          ] as [SnapSlot, string][]).map(([slot, label]) => (
+            <button
+              key={slot}
+              type="button"
+              onClick={() => applySnap(slot)}
+              disabled={pinned}
+              className="h-5 min-w-5 border border-white/10 px-1 font-mono text-[9px] text-zinc-300 hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              title={`Snap ${label}`}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={toggleFull}
+            disabled={pinned}
+            className="h-5 min-w-7 border border-white/10 px-1 font-mono text-[9px] text-zinc-300 hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+            title="Fullscreen inside workspace"
+          >
+            MAX
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const nextPinned = !pinned;
+              setPinned(nextPinned);
+              saveFrame(pos, size, nextPinned);
+              onFocus();
+            }}
+            className={`h-5 min-w-7 border px-1 font-mono text-[9px] ${
+              pinned
+                ? "border-sky-400/60 text-sky-200"
+                : "border-white/10 text-zinc-300 hover:border-white/30 hover:text-white"
+            }`}
+            title={pinned ? "Unpin window" : "Pin window"}
+          >
+            PIN
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-5 min-w-5 border border-white/10 px-1 text-zinc-300 hover:border-white/30 hover:text-white"
+            aria-label="Close window"
+          >
+            x
+          </button>
+        </div>
       </div>
 
       <div className="h-[calc(100%-2rem)] w-full">{children}</div>
 
       <div
-        className="absolute bottom-1 right-1 h-3 w-3 cursor-se-resize bg-zinc-500/70"
+        className={`absolute bottom-1 right-1 h-3 w-3 ${
+          pinned ? "cursor-default bg-zinc-700/50" : "cursor-se-resize bg-zinc-500/70"
+        }`}
         onMouseDown={handleResizeMouseDown}
       />
     </div>
@@ -257,11 +522,17 @@ function WindowFrame({
 function DraggableChartWindow({
   symbol,
   zIndex,
+  bounds,
+  frame,
+  onFrameChange,
   onFocus,
   onClose,
 }: {
   symbol: string;
   zIndex: number;
+  bounds: WorkspaceBounds;
+  frame?: WindowFrameState;
+  onFrameChange: (frame: WindowFrameState) => void;
   onFocus: () => void;
   onClose: () => void;
 }) {
@@ -275,6 +546,9 @@ function DraggableChartWindow({
       initialHeight={340}
       minWidth={340}
       minHeight={260}
+      bounds={bounds}
+      frame={frame}
+      onFrameChange={onFrameChange}
       onFocus={onFocus}
       onClose={onClose}
     >
@@ -289,12 +563,18 @@ function DraggablePolyChartWindow({
   asset,
   timeframe,
   zIndex,
+  bounds,
+  frame,
+  onFrameChange,
   onFocus,
   onClose,
 }: {
   asset: Asset;
   timeframe: Timeframe;
   zIndex: number;
+  bounds: WorkspaceBounds;
+  frame?: WindowFrameState;
+  onFrameChange: (frame: WindowFrameState) => void;
   onFocus: () => void;
   onClose: () => void;
 }) {
@@ -308,6 +588,9 @@ function DraggablePolyChartWindow({
       initialHeight={380}
       minWidth={420}
       minHeight={280}
+      bounds={bounds}
+      frame={frame}
+      onFrameChange={onFrameChange}
       onFocus={onFocus}
       onClose={onClose}
     >
@@ -743,6 +1026,9 @@ function DraggableOrderbookWindow({
   marketId,
   timeframe,
   zIndex,
+  bounds,
+  frame,
+  onFrameChange,
   onFocus,
   onPlaceOrder,
   onClose,
@@ -752,6 +1038,9 @@ function DraggableOrderbookWindow({
   marketId: string;
   timeframe: Timeframe;
   zIndex: number;
+  bounds: WorkspaceBounds;
+  frame?: WindowFrameState;
+  onFrameChange: (frame: WindowFrameState) => void;
   onFocus: () => void;
   onPlaceOrder: (request: PlaceOrderRequest) => Promise<unknown>;
   onClose: () => void;
@@ -828,6 +1117,9 @@ function DraggableOrderbookWindow({
       initialHeight={620}
       minWidth={420}
       minHeight={420}
+      bounds={bounds}
+      frame={frame}
+      onFrameChange={onFrameChange}
       onFocus={onFocus}
       onClose={onClose}
     >
@@ -884,12 +1176,18 @@ function DraggableOrderbookWindow({
 function DraggableBinanceOrderbookWindow({
   asset,
   zIndex,
+  bounds,
+  frame,
+  onFrameChange,
   onFocus,
   onClose,
   settings,
 }: {
   asset: Asset;
   zIndex: number;
+  bounds: WorkspaceBounds;
+  frame?: WindowFrameState;
+  onFrameChange: (frame: WindowFrameState) => void;
   onFocus: () => void;
   onClose: () => void;
   settings: TradingSettings;
@@ -960,6 +1258,9 @@ function DraggableBinanceOrderbookWindow({
       initialHeight={620}
       minWidth={420}
       minHeight={420}
+      bounds={bounds}
+      frame={frame}
+      onFrameChange={onFrameChange}
       onFocus={onFocus}
       onClose={onClose}
     >
@@ -1167,11 +1468,20 @@ export default function ScalpTerminal() {
   const { address, isConnected } = useAppKitAccount();
   const { chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
+  const workspaceRef = useRef<HTMLElement | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isOrderbookSearchOpen, setIsOrderbookSearchOpen] = useState(false);
   const [isBinanceBookSearchOpen, setIsBinanceBookSearchOpen] =
     useState(false);
   const [isPolyChartSearchOpen, setIsPolyChartSearchOpen] = useState(false);
+  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspaceTab[]>([
+    { id: 1, name: "Setup 1" },
+  ]);
+  const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState(1);
+  const [editingTabId, setEditingTabId] = useState<number | null>(null);
+  const [editingTabName, setEditingTabName] = useState("");
+  const [draggedTabId, setDraggedTabId] = useState<number | null>(null);
+  const [nextTabId, setNextTabId] = useState(2);
   const [chartWindows, setChartWindows] = useState<ChartWindow[]>([]);
   const [orderbookWindows, setOrderbookWindows] = useState<OrderbookWindow[]>(
     []
@@ -1185,6 +1495,10 @@ export default function ScalpTerminal() {
   const [nextId, setNextId] = useState(1);
   const [activeWindowId, setActiveWindowId] = useState<number | null>(null);
   const [safeAddress, setSafeAddress] = useState<string | null>(null);
+  const [workspaceBounds, setWorkspaceBounds] = useState<WorkspaceBounds>({
+    width: 1200,
+    height: 720,
+  });
   const [tradingSettings, setTradingSettings] = useState<TradingSettings>(() =>
     readTradingSettings(),
   );
@@ -1235,9 +1549,171 @@ export default function ScalpTerminal() {
     };
   }, []);
 
+  useEffect(() => {
+    const node = workspaceRef.current;
+    if (!node) return;
+
+    const updateBounds = () => {
+      setWorkspaceBounds({
+        width: Math.max(640, node.clientWidth),
+        height: Math.max(420, node.clientHeight),
+      });
+    };
+    const observer = new ResizeObserver(updateBounds);
+
+    updateBounds();
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
+
+  const activeChartWindows = useMemo(
+    () => chartWindows.filter((window) => window.tabId === activeWorkspaceTabId),
+    [activeWorkspaceTabId, chartWindows],
+  );
+  const activeOrderbookWindows = useMemo(
+    () =>
+      orderbookWindows.filter(
+        (window) => window.tabId === activeWorkspaceTabId,
+      ),
+    [activeWorkspaceTabId, orderbookWindows],
+  );
+  const activeBinanceOrderbookWindows = useMemo(
+    () =>
+      binanceOrderbookWindows.filter(
+        (window) => window.tabId === activeWorkspaceTabId,
+      ),
+    [activeWorkspaceTabId, binanceOrderbookWindows],
+  );
+  const activePolyChartWindows = useMemo(
+    () =>
+      polyChartWindows.filter(
+        (window) => window.tabId === activeWorkspaceTabId,
+      ),
+    [activeWorkspaceTabId, polyChartWindows],
+  );
+
+  const createWorkspaceTab = () => {
+    const id = nextTabId;
+    setWorkspaceTabs((prev) => [...prev, { id, name: getDefaultTabName(id) }]);
+    setActiveWorkspaceTabId(id);
+    setActiveWindowId(null);
+    setNextTabId((value) => value + 1);
+  };
+
+  const startRenamingTab = (tab: WorkspaceTab) => {
+    setEditingTabId(tab.id);
+    setEditingTabName(tab.name);
+  };
+
+  const commitRenamingTab = () => {
+    if (editingTabId === null) return;
+
+    const nextName = editingTabName.trim();
+    setWorkspaceTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === editingTabId
+          ? { ...tab, name: nextName || getDefaultTabName(tab.id) }
+          : tab,
+      ),
+    );
+
+    setEditingTabId(null);
+    setEditingTabName("");
+  };
+
+  const cancelRenamingTab = () => {
+    setEditingTabId(null);
+    setEditingTabName("");
+  };
+
+  const moveWorkspaceTab = (targetTabId: number) => {
+    if (draggedTabId === null || draggedTabId === targetTabId) {
+      setDraggedTabId(null);
+      return;
+    }
+
+    setWorkspaceTabs((prev) => {
+      const draggedTab = prev.find((tab) => tab.id === draggedTabId);
+      if (!draggedTab) return prev;
+
+      const withoutDragged = prev.filter((tab) => tab.id !== draggedTabId);
+      const targetIndex = withoutDragged.findIndex(
+        (tab) => tab.id === targetTabId,
+      );
+
+      if (targetIndex < 0) return prev;
+
+      return [
+        ...withoutDragged.slice(0, targetIndex),
+        draggedTab,
+        ...withoutDragged.slice(targetIndex),
+      ];
+    });
+    setDraggedTabId(null);
+  };
+
+  const updateChartWindowFrame = (id: number, frame: WindowFrameState) => {
+    setChartWindows((prev) =>
+      prev.map((window) => (window.id === id ? { ...window, frame } : window)),
+    );
+  };
+
+  const updateOrderbookWindowFrame = (id: number, frame: WindowFrameState) => {
+    setOrderbookWindows((prev) =>
+      prev.map((window) => (window.id === id ? { ...window, frame } : window)),
+    );
+  };
+
+  const updateBinanceOrderbookWindowFrame = (
+    id: number,
+    frame: WindowFrameState,
+  ) => {
+    setBinanceOrderbookWindows((prev) =>
+      prev.map((window) => (window.id === id ? { ...window, frame } : window)),
+    );
+  };
+
+  const updatePolyChartWindowFrame = (id: number, frame: WindowFrameState) => {
+    setPolyChartWindows((prev) =>
+      prev.map((window) => (window.id === id ? { ...window, frame } : window)),
+    );
+  };
+
+  const closeWorkspaceTab = (tabId: number) => {
+    if (workspaceTabs.length <= 1) return;
+
+    const nextTabs = workspaceTabs.filter((tab) => tab.id !== tabId);
+    const tabIndex = workspaceTabs.findIndex((tab) => tab.id === tabId);
+    const fallbackTab =
+      nextTabs[Math.max(0, tabIndex - 1)] ?? nextTabs[0] ?? workspaceTabs[0];
+    const nextActiveId =
+      activeWorkspaceTabId === tabId ? fallbackTab.id : activeWorkspaceTabId;
+
+    setWorkspaceTabs(nextTabs);
+    setActiveWorkspaceTabId(nextActiveId);
+    setActiveWindowId(null);
+    if (editingTabId === tabId) {
+      cancelRenamingTab();
+    }
+    setChartWindows((prev) => prev.filter((window) => window.tabId !== tabId));
+    setOrderbookWindows((prev) =>
+      prev.filter((window) => window.tabId !== tabId),
+    );
+    setBinanceOrderbookWindows((prev) =>
+      prev.filter((window) => window.tabId !== tabId),
+    );
+    setPolyChartWindows((prev) =>
+      prev.filter((window) => window.tabId !== tabId),
+    );
+  };
+
   const openChartForSymbol = (symbol: string) => {
     const id = nextId;
-    setChartWindows((prev) => [...prev, { id, symbol }]);
+    setChartWindows((prev) => [
+      ...prev,
+      { id, tabId: activeWorkspaceTabId, symbol },
+    ]);
     setActiveWindowId(id);
     setNextId((id) => id + 1);
   };
@@ -1256,7 +1732,10 @@ export default function ScalpTerminal() {
     }
 
     const id = nextId;
-    setOrderbookWindows((prev) => [...prev, { id, ...params }]);
+    setOrderbookWindows((prev) => [
+      ...prev,
+      { id, tabId: activeWorkspaceTabId, ...params },
+    ]);
     setActiveWindowId(id);
     setNextId((id) => id + 1);
   };
@@ -1268,7 +1747,10 @@ export default function ScalpTerminal() {
     }
 
     const id = nextId;
-    setBinanceOrderbookWindows((prev) => [...prev, { id, asset }]);
+    setBinanceOrderbookWindows((prev) => [
+      ...prev,
+      { id, tabId: activeWorkspaceTabId, asset },
+    ]);
     setActiveWindowId(id);
     setNextId((id) => id + 1);
   };
@@ -1287,7 +1769,10 @@ export default function ScalpTerminal() {
     }
 
     const id = nextId;
-    setPolyChartWindows((prev) => [...prev, { id, ...params }]);
+    setPolyChartWindows((prev) => [
+      ...prev,
+      { id, tabId: activeWorkspaceTabId, ...params },
+    ]);
     setActiveWindowId(id);
     setNextId((id) => id + 1);
   };
@@ -1338,10 +1823,10 @@ export default function ScalpTerminal() {
   };
 
   const isEmpty =
-    chartWindows.length === 0 &&
-    orderbookWindows.length === 0 &&
-    binanceOrderbookWindows.length === 0 &&
-    polyChartWindows.length === 0;
+    activeChartWindows.length === 0 &&
+    activeOrderbookWindows.length === 0 &&
+    activeBinanceOrderbookWindows.length === 0 &&
+    activePolyChartWindows.length === 0;
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden theme-bg">
@@ -1349,94 +1834,248 @@ export default function ScalpTerminal() {
         <Header />
 
         <main className="relative flex flex-1 flex-col overflow-hidden theme-bg">
-          <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4">
-            {isEmpty && (
-              <div className="flex max-w-xl flex-col items-center justify-center text-center">
-                <p className="text-[28px] font-semibold">
-                  PolyBook scalp terminal
-                </p>
-                <span className="mt-2 text-sm theme-muted">
-                  Open an orderbook or a Binance reference chart for BTC, ETH,
-                  SOL, or XRP. The workspace is focused only on fast Polymarket
-                  crypto windows.
-                </span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="inline-flex border theme-border theme-surface transition hover:scale-103">
+          <div className="flex h-10 shrink-0 items-end gap-1 border-b theme-border bg-[var(--surface)] px-2">
+            {workspaceTabs.map((tab) => (
+              <div
+                key={tab.id}
+                draggable={editingTabId !== tab.id}
+                onDragStart={() => setDraggedTabId(tab.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => moveWorkspaceTab(tab.id)}
+                onDragEnd={() => setDraggedTabId(null)}
+                className={`flex h-7 w-[138px] items-center border text-xs transition ${
+                  tab.id === activeWorkspaceTabId
+                    ? "border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--foreground)]"
+                    : "theme-border bg-[var(--surface-muted)] theme-muted"
+                } ${
+                  draggedTabId === tab.id ? "opacity-45" : ""
+                }`}
+              >
                 <button
                   type="button"
-                  className="flex w-[112px] flex-col items-center gap-2 p-3"
-                  onClick={() => setIsOrderbookSearchOpen(true)}
-                  title="Open Polymarket orderbook"
+                  onClick={() => {
+                    setActiveWorkspaceTabId(tab.id);
+                    setActiveWindowId(null);
+                  }}
+                  onDoubleClick={() => startRenamingTab(tab)}
+                  className={`h-full min-w-0 flex-1 truncate px-3 text-left font-semibold ${
+                    editingTabId === tab.id ? "hidden" : ""
+                  }`}
+                  title="Double click to rename. Drag to reorder."
                 >
-                  <Image
-                    src="/bookmark.svg"
-                    alt="Polymarket book"
-                    width={60}
-                    height={60}
-                    className="theme-center-icon block cursor-pointer p-1 shadow-lg"
-                  />
-                  <span className="text-xs theme-muted">Poly Book</span>
+                  {tab.name}
                 </button>
+                {editingTabId === tab.id && (
+                  <input
+                    autoFocus
+                    value={editingTabName}
+                    onChange={(event) => setEditingTabName(event.target.value)}
+                    onBlur={commitRenamingTab}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") commitRenamingTab();
+                      if (event.key === "Escape") cancelRenamingTab();
+                    }}
+                    className="h-full min-w-0 flex-1 bg-transparent px-2 font-mono text-xs text-[var(--foreground)] outline-none"
+                  />
+                )}
+                {workspaceTabs.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => closeWorkspaceTab(tab.id)}
+                    className="h-full w-7 shrink-0 border-l theme-border text-center hover:text-[var(--foreground)]"
+                    aria-label={`Close ${tab.name}`}
+                  >
+                    x
+                  </button>
+                )}
               </div>
+            ))}
+            <button
+              type="button"
+              onClick={createWorkspaceTab}
+              className="h-7 w-9 border theme-border bg-[var(--surface-muted)] text-sm text-[var(--foreground)] transition hover:border-[var(--accent)]"
+              title="New setup tab"
+            >
+              +
+            </button>
+          </div>
 
-              <div className="inline-flex border theme-border theme-surface transition hover:scale-103">
-                <button
-                  type="button"
-                  className="flex w-[112px] flex-col items-center gap-2 p-3"
-                  onClick={() => setIsBinanceBookSearchOpen(true)}
-                  title="Open Binance orderbook"
-                >
-                  <Image
-                    src="/bookmark.svg"
-                    alt="Binance book"
-                    width={60}
-                    height={60}
-                    className="theme-center-icon block cursor-pointer p-1 shadow-lg"
-                  />
-                  <span className="text-xs theme-muted">Binance Book</span>
-                </button>
-              </div>
+          <section
+            ref={workspaceRef}
+            className="relative min-h-0 flex-1 overflow-hidden theme-bg"
+          >
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-5 px-4">
+              {isEmpty && (
+                <div className="flex max-w-xl flex-col items-center justify-center text-center">
+                  <p className="text-[28px] font-semibold">
+                    PolyBook scalp terminal
+                  </p>
+                  <span className="mt-2 text-sm theme-muted">
+                    Open an orderbook or a Binance reference chart for BTC, ETH,
+                    SOL, or XRP. The workspace is focused only on fast Polymarket
+                    crypto windows.
+                  </span>
+                </div>
+              )}
 
-              <div className="inline-flex border theme-border theme-surface transition hover:scale-103">
-                <button
-                  type="button"
-                  className="flex w-[112px] flex-col items-center gap-2 p-3"
-                  onClick={() => setIsSearchOpen(true)}
-                  title="Open Binance chart"
-                >
-                  <Image
-                    src="/metrics.svg"
-                    alt="Binance chart"
-                    width={60}
-                    height={60}
-                    className="theme-center-icon block cursor-pointer p-1 shadow-lg"
-                  />
-                  <span className="text-xs theme-muted">Binance Chart</span>
-                </button>
-              </div>
+              <div className="pointer-events-auto grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="inline-flex border theme-border theme-surface transition hover:scale-103">
+                  <button
+                    type="button"
+                    className="flex w-[112px] flex-col items-center gap-2 p-3"
+                    onClick={() => setIsOrderbookSearchOpen(true)}
+                    title="Open Polymarket orderbook"
+                  >
+                    <Image
+                      src="/bookmark.svg"
+                      alt="Polymarket book"
+                      width={60}
+                      height={60}
+                      className="theme-center-icon block cursor-pointer p-1 shadow-lg"
+                    />
+                    <span className="text-xs theme-muted">Poly Book</span>
+                  </button>
+                </div>
 
-              <div className="inline-flex border theme-border theme-surface transition hover:scale-103">
-                <button
-                  type="button"
-                  className="flex w-[112px] flex-col items-center gap-2 p-3"
-                  onClick={() => setIsPolyChartSearchOpen(true)}
-                  title="Open Polymarket chart"
-                >
-                  <Image
-                    src="/metrics.svg"
-                    alt="Polymarket chart"
-                    width={60}
-                    height={60}
-                    className="theme-center-icon block cursor-pointer p-1 shadow-lg"
-                  />
-                  <span className="text-xs theme-muted">Poly Chart</span>
-                </button>
+                <div className="inline-flex border theme-border theme-surface transition hover:scale-103">
+                  <button
+                    type="button"
+                    className="flex w-[112px] flex-col items-center gap-2 p-3"
+                    onClick={() => setIsBinanceBookSearchOpen(true)}
+                    title="Open Binance orderbook"
+                  >
+                    <Image
+                      src="/bookmark.svg"
+                      alt="Binance book"
+                      width={60}
+                      height={60}
+                      className="theme-center-icon block cursor-pointer p-1 shadow-lg"
+                    />
+                    <span className="text-xs theme-muted">Binance Book</span>
+                  </button>
+                </div>
+
+                <div className="inline-flex border theme-border theme-surface transition hover:scale-103">
+                  <button
+                    type="button"
+                    className="flex w-[112px] flex-col items-center gap-2 p-3"
+                    onClick={() => setIsSearchOpen(true)}
+                    title="Open Binance chart"
+                  >
+                    <Image
+                      src="/metrics.svg"
+                      alt="Binance chart"
+                      width={60}
+                      height={60}
+                      className="theme-center-icon block cursor-pointer p-1 shadow-lg"
+                    />
+                    <span className="text-xs theme-muted">Binance Chart</span>
+                  </button>
+                </div>
+
+                <div className="inline-flex border theme-border theme-surface transition hover:scale-103">
+                  <button
+                    type="button"
+                    className="flex w-[112px] flex-col items-center gap-2 p-3"
+                    onClick={() => setIsPolyChartSearchOpen(true)}
+                    title="Open Polymarket chart"
+                  >
+                    <Image
+                      src="/metrics.svg"
+                      alt="Polymarket chart"
+                      width={60}
+                      height={60}
+                      className="theme-center-icon block cursor-pointer p-1 shadow-lg"
+                    />
+                    <span className="text-xs theme-muted">Poly Chart</span>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+
+            {activeChartWindows.map((window) => (
+              <DraggableChartWindow
+                key={window.id}
+                symbol={window.symbol}
+                zIndex={getWindowZIndex(window.id)}
+                bounds={workspaceBounds}
+                frame={window.frame}
+                onFrameChange={(frame) =>
+                  updateChartWindowFrame(window.id, frame)
+                }
+                onFocus={() => setActiveWindowId(window.id)}
+                onClose={() =>
+                  setChartWindows((prev) =>
+                    prev.filter((chart) => chart.id !== window.id)
+                  )
+                }
+              />
+            ))}
+
+            {activeBinanceOrderbookWindows.map((window) => (
+              <DraggableBinanceOrderbookWindow
+                key={window.id}
+                asset={window.asset}
+                zIndex={getWindowZIndex(window.id)}
+                bounds={workspaceBounds}
+                frame={window.frame}
+                onFrameChange={(frame) =>
+                  updateBinanceOrderbookWindowFrame(window.id, frame)
+                }
+                onFocus={() => setActiveWindowId(window.id)}
+                settings={tradingSettings}
+                onClose={() =>
+                  setBinanceOrderbookWindows((prev) =>
+                    prev.filter((orderbook) => orderbook.id !== window.id)
+                  )
+                }
+              />
+            ))}
+
+            {activePolyChartWindows.map((window) => (
+              <DraggablePolyChartWindow
+                key={window.id}
+                asset={window.asset}
+                timeframe={window.timeframe}
+                zIndex={getWindowZIndex(window.id)}
+                bounds={workspaceBounds}
+                frame={window.frame}
+                onFrameChange={(frame) =>
+                  updatePolyChartWindowFrame(window.id, frame)
+                }
+                onFocus={() => setActiveWindowId(window.id)}
+                onClose={() =>
+                  setPolyChartWindows((prev) =>
+                    prev.filter((chart) => chart.id !== window.id)
+                  )
+                }
+              />
+            ))}
+
+            {activeOrderbookWindows.map((window) => (
+              <DraggableOrderbookWindow
+                key={window.id}
+                asset={window.asset}
+                marketId={window.marketId}
+                timeframe={window.timeframe}
+                zIndex={getWindowZIndex(window.id)}
+                bounds={workspaceBounds}
+                frame={window.frame}
+                onFrameChange={(frame) =>
+                  updateOrderbookWindowFrame(window.id, frame)
+                }
+                onFocus={() => setActiveWindowId(window.id)}
+                onPlaceOrder={placePolymarketOrder}
+                settings={tradingSettings}
+                onClose={() =>
+                  setOrderbookWindows((prev) =>
+                    prev.filter((orderbook) => orderbook.id !== window.id)
+                  )
+                }
+              />
+            ))}
+          </section>
         </main>
       </div>
 
@@ -1480,68 +2119,6 @@ export default function ScalpTerminal() {
           }}
         />
       )}
-
-      {chartWindows.map((window) => (
-        <DraggableChartWindow
-          key={window.id}
-          symbol={window.symbol}
-          zIndex={getWindowZIndex(window.id)}
-          onFocus={() => setActiveWindowId(window.id)}
-          onClose={() =>
-            setChartWindows((prev) =>
-              prev.filter((chart) => chart.id !== window.id)
-            )
-          }
-        />
-      ))}
-
-      {binanceOrderbookWindows.map((window) => (
-        <DraggableBinanceOrderbookWindow
-          key={window.id}
-          asset={window.asset}
-          zIndex={getWindowZIndex(window.id)}
-          onFocus={() => setActiveWindowId(window.id)}
-          settings={tradingSettings}
-          onClose={() =>
-            setBinanceOrderbookWindows((prev) =>
-              prev.filter((orderbook) => orderbook.id !== window.id)
-            )
-          }
-        />
-      ))}
-
-      {polyChartWindows.map((window) => (
-        <DraggablePolyChartWindow
-          key={window.id}
-          asset={window.asset}
-          timeframe={window.timeframe}
-          zIndex={getWindowZIndex(window.id)}
-          onFocus={() => setActiveWindowId(window.id)}
-          onClose={() =>
-            setPolyChartWindows((prev) =>
-              prev.filter((chart) => chart.id !== window.id)
-            )
-          }
-        />
-      ))}
-
-      {orderbookWindows.map((window) => (
-        <DraggableOrderbookWindow
-          key={window.id}
-          asset={window.asset}
-          marketId={window.marketId}
-          timeframe={window.timeframe}
-          zIndex={getWindowZIndex(window.id)}
-          onFocus={() => setActiveWindowId(window.id)}
-          onPlaceOrder={placePolymarketOrder}
-          settings={tradingSettings}
-          onClose={() =>
-            setOrderbookWindows((prev) =>
-              prev.filter((orderbook) => orderbook.id !== window.id)
-            )
-          }
-        />
-      ))}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { useAppKitAccount } from "@reown/appkit/react";
 import { DepositContent } from "./DepositContent";
 import { useModal } from "./Modal";
 import CustomConnect from "./CustomConnect";
+import { ThemeToggle } from "./ThemeToggle";
 
 type Asset = "BTC" | "ETH" | "SOL" | "XRP";
 
@@ -183,6 +184,8 @@ export default function Header() {
             Profile
           </button>
         </nav>
+
+        <ThemeToggle />
 
         <div className="min-w-0 shrink-0">
           <CustomConnect onSafeAddress={setSafe} />
