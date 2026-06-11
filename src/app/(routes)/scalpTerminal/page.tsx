@@ -8,7 +8,10 @@ import {
   type TradingSettings,
 } from "@/app/Components/tradingSettings";
 import { initPolymarketClient } from "@/app/Components/verifyUser";
-import { useEthersSigner } from "@/app/Components/CustomConnect";
+import {
+  ensureDepositWalletWithRelayer,
+  useEthersSigner,
+} from "@/app/Components/CustomConnect";
 import { OrderType, Side, type TickSize } from "@polymarket/clob-client-v2";
 import { useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
@@ -1788,10 +1791,6 @@ export default function ScalpTerminal() {
       throw new Error("Connect wallet before trading.");
     }
 
-    if (!safeAddress) {
-      throw new Error("Safe address is not ready yet.");
-    }
-
     if (!draft.tokenId) {
       throw new Error("Missing Polymarket token id for this order.");
     }
@@ -1805,7 +1804,23 @@ export default function ScalpTerminal() {
       throw new Error("Connected wallet changed. Reconnect wallet.");
     }
 
-    const client = await initPolymarketClient(signer, safeAddress);
+    const tradingWalletAddress = await ensureDepositWalletWithRelayer(signer);
+    const normalizedTradingWallet = tradingWalletAddress.toLowerCase();
+    const normalizedSafeAddress = safeAddress?.toLowerCase();
+
+    if (
+      typeof window !== "undefined" &&
+      safeAddress &&
+      normalizedSafeAddress !== normalizedTradingWallet
+    ) {
+      window.localStorage.removeItem(`poly_creds_${safeAddress}`);
+    }
+
+    if (normalizedSafeAddress !== normalizedTradingWallet) {
+      setSafeAddress(tradingWalletAddress);
+    }
+
+    const client = await initPolymarketClient(signer, tradingWalletAddress);
     const side = draft.side === "BUY" ? Side.BUY : Side.SELL;
     const price = Number(draft.price.toFixed(3));
 

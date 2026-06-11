@@ -186,6 +186,54 @@ export async function deploySafeWithRelayer(
   return (result.proxyAddress as string | undefined) ?? expectedSafeAddress;
 }
 
+export async function ensureDepositWalletWithRelayer(
+  signer: ethers.providers.JsonRpcSigner
+) {
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL;
+  const builderConfig = new BuilderConfig({
+    remoteBuilderConfig: {
+      url: `${origin}/api/polymarket-builder-sign`,
+    },
+  });
+
+  const relayClient = new RelayClient(
+    RELAYER_URL,
+    POLYGON_CHAIN_ID,
+    signer,
+    builderConfig
+  );
+
+  const walletAddress = await relayClient.deriveDepositWalletAddress();
+  const deployed = await relayClient.getDeployed(walletAddress, "WALLET");
+
+  if (deployed) {
+    return walletAddress;
+  }
+
+  const response = await relayClient.deployDepositWallet();
+  const result = await relayClient.pollUntilState(
+    response.transactionID,
+    [
+      RelayerTransactionState.STATE_MINED,
+      RelayerTransactionState.STATE_CONFIRMED,
+      RelayerTransactionState.STATE_EXECUTED,
+      RelayerTransactionState.STATE_FAILED,
+    ],
+    RelayerTransactionState.STATE_FAILED,
+    60,
+    3000
+  );
+
+  if (!result || result.state === RelayerTransactionState.STATE_FAILED) {
+    throw new Error("Deposit wallet deployment failed");
+  }
+
+  return walletAddress;
+}
+
 export function deriveSafeAddress(ownerAddress: string) {
   return deriveSafe(ownerAddress, SAFE_FACTORY_ADDRESS);
 }
