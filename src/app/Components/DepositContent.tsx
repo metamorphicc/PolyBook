@@ -50,7 +50,7 @@ export const DepositContent = ({ address, closeModal }: { address: string; close
     return (
       <div className="flex flex-col gap-4">
         <h2 className="text-xl font-bold text-[var(--foreground)]">Top Up Balance</h2>
-        <p className="theme-muted">Your Safe deposit address:</p>
+        <p className="theme-muted">Your Polymarket trading wallet address:</p>
 
         <div className="flex items-center justify-center border theme-border bg-[var(--surface-muted)] p-3">
           <div className="flex h-[112px] w-[112px] items-center justify-center bg-white p-2">
@@ -74,7 +74,9 @@ export const DepositContent = ({ address, closeModal }: { address: string; close
           <Image src={"/copy.svg"} width={16} height={16} alt="img" />
         </div>
         {copied && <span className="text-xs text-green-400">Address copied</span>}
-        <span className="text-md text-[var(--foreground)]">Send Polygon assets to this Safe address to start trade</span>
+        <span className="text-md text-[var(--foreground)]">
+          Send Polygon pUSD or USDC.e to this address before trading.
+        </span>
         <button
           onClick={closeModal}
           className="mt-2 cursor-pointer bg-[var(--foreground)] py-2 font-bold text-[var(--background)] hover:shadow-lg"

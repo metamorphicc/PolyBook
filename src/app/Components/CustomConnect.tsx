@@ -234,6 +234,29 @@ export async function ensureDepositWalletWithRelayer(
   return walletAddress;
 }
 
+export async function deriveDepositWalletAddressWithRelayer(
+  signer: ethers.providers.JsonRpcSigner
+) {
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL;
+  const builderConfig = new BuilderConfig({
+    remoteBuilderConfig: {
+      url: `${origin}/api/polymarket-builder-sign`,
+    },
+  });
+
+  const relayClient = new RelayClient(
+    RELAYER_URL,
+    POLYGON_CHAIN_ID,
+    signer,
+    builderConfig
+  );
+
+  return relayClient.deriveDepositWalletAddress();
+}
+
 export function deriveSafeAddress(ownerAddress: string) {
   return deriveSafe(ownerAddress, SAFE_FACTORY_ADDRESS);
 }
@@ -254,14 +277,40 @@ async function saveSafeAddress(ownerAddress: string, safeAddress: string) {
   }
 }
 
+async function saveDepositWalletAddress(
+  ownerAddress: string,
+  depositWalletAddress: string
+) {
+  const res = await fetch("/api/user/trading-wallet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ownerAddress,
+      depositWalletAddress,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? "Failed to save deposit wallet");
+  }
+}
+
 type CustomConnectProps = {
   onSafeAddress?: (safeAddress: string | null) => void;
+  onTradingWalletAddress?: (depositWalletAddress: string | null) => void;
 };
 
-export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
+export default function CustomConnect({
+  onSafeAddress,
+  onTradingWalletAddress,
+}: CustomConnectProps) {
   const [safeBalance, setSafeBalance] = useState<string>("0");
   const [usdcBalance, setUsdcBalance] = useState<string>("0.00");
   const [safeAddress, setSafeAddress] = useState<string | null>(null);
+  const [tradingWalletAddress, setTradingWalletAddress] = useState<string | null>(
+    null
+  );
 
   const signer = useEthersSigner();
   const { open } = useAppKit();
@@ -315,7 +364,9 @@ export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
     if (!isConnected || !address) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSafeAddress(null);
+      setTradingWalletAddress(null);
       onSafeAddress?.(null);
+      onTradingWalletAddress?.(null);
       return;
     }
 
@@ -348,24 +399,32 @@ export default function CustomConnect({ onSafeAddress }: CustomConnectProps) {
         console.log("[INIT] safeAddrFromDb:", safeAddrFromDb);
         setSafeAddress(safeAddrFromDb);
         onSafeAddress?.(safeAddrFromDb);
+
+        if (signer) {
+          const depositWalletAddress =
+            await deriveDepositWalletAddressWithRelayer(signer);
+          await saveDepositWalletAddress(address, depositWalletAddress);
+          setTradingWalletAddress(depositWalletAddress);
+          onTradingWalletAddress?.(depositWalletAddress);
+        }
       } catch (e) {
         console.error("[initSafe error]:", e);
       }
     };
 
     initSafe().catch(console.error);
-  }, [isConnected, address, onSafeAddress]);
+  }, [isConnected, address, onSafeAddress, onTradingWalletAddress, signer]);
 
   useEffect(() => {
-    console.log("[EFFECT] safeAddress:", safeAddress, "signer:", !!signer);
-    if (!safeAddress || !signer) return;
+    console.log("[EFFECT] tradingWalletAddress:", tradingWalletAddress, "signer:", !!signer);
+    if (!tradingWalletAddress || !signer) return;
 
-    console.log("[EFFECT] calling fetchSafeBalance for", safeAddress);
+    console.log("[EFFECT] calling fetchSafeBalance for", tradingWalletAddress);
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchSafeBalance(safeAddress).catch((e) =>
+    fetchSafeBalance(tradingWalletAddress).catch((e) =>
       console.error("[fetchSafeBalance error]:", e)
     );
-  }, [safeAddress, signer, fetchSafeBalance]);
+  }, [tradingWalletAddress, signer, fetchSafeBalance]);
 
   const conv = Number(safeBalance);
 

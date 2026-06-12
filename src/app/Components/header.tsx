@@ -103,12 +103,12 @@ export default function Header() {
   const router = useRouter();
   const { openModal, closeModal } = useModal();
   const { address, isConnected } = useAppKitAccount();
-  const [safe, setSafe] = useState<string | null>(null);
+  const [tradingWallet, setTradingWallet] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isConnected || !address) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSafe(null);
+      setTradingWallet(null);
       return;
     }
 
@@ -116,11 +116,17 @@ export default function Header() {
 
     const initAccount = async () => {
       try {
-        const res = await fetch(`/api/user/safe?address=${address}`);
-        const data = await res.json();
-        if (!cancelled) setSafe((data.safeAddress as string | null) ?? null);
+        const tradingRes = await fetch(
+          `/api/user/trading-wallet?address=${address}`,
+        );
+        const tradingData = await tradingRes.json();
+        if (!cancelled) {
+          setTradingWallet(
+            (tradingData.depositWalletAddress as string | null) ?? null,
+          );
+        }
       } catch {
-        if (!cancelled) setSafe(null);
+        if (!cancelled) setTradingWallet(null);
       }
     };
 
@@ -132,7 +138,12 @@ export default function Header() {
   }, [address, isConnected]);
 
   const handleDeposit = () => {
-    openModal(<DepositContent address={safe ?? ""} closeModal={closeModal} />);
+    openModal(
+      <DepositContent
+        address={tradingWallet ?? ""}
+        closeModal={closeModal}
+      />,
+    );
   };
 
   return (
@@ -170,7 +181,7 @@ export default function Header() {
           </button>
           <button
             type="button"
-            disabled={!safe}
+            disabled={!tradingWallet}
             onClick={handleDeposit}
             className="px-3 py-2 text-sm theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
           >
@@ -188,7 +199,7 @@ export default function Header() {
         <ThemeToggle />
 
         <div className="min-w-0 shrink-0">
-          <CustomConnect onSafeAddress={setSafe} />
+          <CustomConnect onTradingWalletAddress={setTradingWallet} />
         </div>
       </div>
     </header>
