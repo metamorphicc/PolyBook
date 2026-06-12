@@ -12,7 +12,12 @@ import {
   ensureDepositWalletWithRelayer,
   useEthersSigner,
 } from "@/app/Components/CustomConnect";
-import { OrderType, Side, type TickSize } from "@polymarket/clob-client-v2";
+import {
+  OrderType,
+  Side,
+  SignatureTypeV2,
+  type TickSize,
+} from "@polymarket/clob-client-v2";
 import { useAppKitAccount } from "@reown/appkit/react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -79,13 +84,16 @@ type OrderbookLevel = {
 };
 
 type OrderSide = "BUY" | "SELL";
+type OrderIntent = "YES" | "NO";
 
 type OrderDraft = {
   source: "Polymarket" | "Binance";
   side: OrderSide;
+  intent?: OrderIntent;
   asset: Asset;
   label: string;
   price: number;
+  ladderPrice?: number;
   size: number;
   tokenId?: string;
   tickSize?: TickSize;
@@ -96,6 +104,33 @@ type PlaceOrderRequest = {
   size: number;
   postOnly?: boolean;
 };
+
+async function rememberDepositWalletAddress(
+  ownerAddress: string,
+  depositWalletAddress: string,
+) {
+  const res = await fetch("/api/user/trading-wallet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ownerAddress, depositWalletAddress }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof data.error === "string"
+        ? data.error
+        : "Failed to save deposit wallet address",
+    );
+  }
+}
+
+function toClobShareSize(notionalSize: number, price: number) {
+  if (!Number.isFinite(notionalSize) || notionalSize <= 0) return 0;
+  if (!Number.isFinite(price) || price <= 0) return 0;
+
+  return notionalSize / price;
+}
 
 type OrderbookOutcome = "Up" | "Down";
 
@@ -613,6 +648,7 @@ function ScalpOrderbookLadder({
   draft,
   onSelect,
   tokenId,
+  noTokenId,
   tickSize,
   onPlaceOrder,
   settings,
@@ -627,6 +663,7 @@ function ScalpOrderbookLadder({
   draft: OrderDraft | null;
   onSelect: (draft: OrderDraft) => void;
   tokenId?: string;
+  noTokenId?: string;
   tickSize?: TickSize;
   onPlaceOrder?: (request: PlaceOrderRequest) => Promise<unknown>;
   settings: TradingSettings;
@@ -692,22 +729,29 @@ function ScalpOrderbookLadder({
     bestBid !== null && bestAsk !== null ? (bestBid + bestAsk) / 2 : null;
 
   const buildDraft = (
-    side: OrderSide,
-    price: number,
+    intent: OrderIntent,
+    ladderPrice: number,
     size: number
-  ): OrderDraft => ({
-    source: mode === "poly" ? "Polymarket" : "Binance",
-    side,
-    asset,
-    label:
-      mode === "poly"
-        ? `${asset} ${side} @ ${formatBookPrice(asset, price, mode)}`
-        : `${asset}/USDT ${side} @ ${formatBookPrice(asset, price, mode)}`,
-    price,
-    size,
-    tokenId,
-    tickSize,
-  });
+  ): OrderDraft => {
+    const isNo = mode === "poly" && intent === "NO";
+    const price = isNo ? Number((1 - ladderPrice).toFixed(priceDecimals)) : ladderPrice;
+
+    return {
+      source: mode === "poly" ? "Polymarket" : "Binance",
+      side: mode === "poly" ? "BUY" : intent === "YES" ? "BUY" : "SELL",
+      intent,
+      asset,
+      label:
+        mode === "poly"
+          ? `${asset} ${intent} @ ${formatBookPrice(asset, price, mode)}`
+          : `${asset}/USDT ${intent === "YES" ? "BUY" : "SELL"} @ ${formatBookPrice(asset, price, mode)}`,
+      price,
+      ladderPrice,
+      size,
+      tokenId: isNo ? noTokenId : tokenId,
+      tickSize,
+    };
+  };
 
   const submitOrder = async (
     targetDraft = draft,
@@ -747,7 +791,7 @@ function ScalpOrderbookLadder({
 
     const minLiquidity = Number(settings.minBookLiquidity);
     const sideLiquidity =
-      targetDraft.side === "BUY" ? askLiquidity : bidLiquidity;
+      targetDraft.intent === "NO" ? askLiquidity : bidLiquidity;
     if (
       mode === "poly" &&
       Number.isFinite(minLiquidity) &&
@@ -792,20 +836,20 @@ function ScalpOrderbookLadder({
     side: "bid" | "ask"
   ) => {
     const size = side === "bid" ? row.bidSize : row.askSize;
+    const intent: OrderIntent = side === "bid" ? "YES" : "NO";
     const active =
-      draft?.price.toFixed(priceDecimals) === row.price.toFixed(priceDecimals) &&
-      ((side === "ask" && draft.side === "BUY") ||
-        (side === "bid" && draft.side === "SELL"));
+      (draft?.ladderPrice ?? draft?.price)?.toFixed(priceDecimals) ===
+        row.price.toFixed(priceDecimals) && draft?.intent === intent;
     const width = `${Math.min(100, (size / maxSize) * 100)}%`;
+    const disabled =
+      size <= 0 || (intent === "NO" && !noTokenId) || (isOneClickMode && submitting);
 
     return (
       <button
         type="button"
-        disabled={size <= 0 || (isOneClickMode && submitting)}
+        disabled={disabled}
         onClick={() => {
-          void handleSelectDraft(
-            buildDraft(side === "ask" ? "BUY" : "SELL", row.price, size)
-          );
+          void handleSelectDraft(buildDraft(intent, row.price, size));
         }}
         className={`relative h-[22px] overflow-hidden px-2 text-left font-mono text-[11px] transition disabled:cursor-default ${
           side === "bid"
@@ -881,7 +925,7 @@ function ScalpOrderbookLadder({
             const isBestBid = bestBid !== null && row.price === bestBid;
             const isBestAsk = bestAsk !== null && row.price === bestAsk;
             const selected =
-              draft?.price.toFixed(priceDecimals) ===
+              (draft?.ladderPrice ?? draft?.price)?.toFixed(priceDecimals) ===
               row.price.toFixed(priceDecimals);
 
             return (
@@ -895,15 +939,15 @@ function ScalpOrderbookLadder({
                 <button
                   type="button"
                   onClick={() => {
-                    if (row.askSize > 0) {
+                    if (row.bidSize > 0) {
                       void handleSelectDraft(
-                        buildDraft("BUY", row.price, row.askSize)
+                        buildDraft("YES", row.price, row.bidSize)
                       );
                       return;
                     }
-                    if (row.bidSize > 0) {
+                    if (row.askSize > 0) {
                       void handleSelectDraft(
-                        buildDraft("SELL", row.price, row.bidSize)
+                        buildDraft("NO", row.price, row.askSize)
                       );
                     }
                   }}
@@ -934,7 +978,7 @@ function ScalpOrderbookLadder({
               <div className="mt-1 truncate text-[10px] theme-muted">
                 {draft
                   ? `Last: ${draft.label}`
-                  : "Click bid/ask liquidity to send immediately"}
+                  : "Click green YES or red NO liquidity to send immediately"}
               </div>
               {orderStatus && (
                 <div className="mt-2 max-h-10 overflow-hidden text-[10px] theme-muted">
@@ -957,7 +1001,7 @@ function ScalpOrderbookLadder({
             <div className="min-w-0">
               <div
                 className={`font-mono text-xs ${
-                  draft.side === "BUY" ? "text-green-300" : "text-red-300"
+                  draft.intent === "NO" ? "text-red-300" : "text-green-300"
                 }`}
               >
                 {draft.label}
@@ -1057,6 +1101,7 @@ function DraggableOrderbookWindow({
   const [slug, setSlug] = useState<string>("");
   const [draft, setDraft] = useState<OrderDraft | null>(null);
   const [tokenId, setTokenId] = useState<string>("");
+  const [noTokenId, setNoTokenId] = useState<string>("");
   const [tickSize, setTickSize] = useState<TickSize>("0.001");
 
   useEffect(() => {
@@ -1076,8 +1121,15 @@ function DraggableOrderbookWindow({
         }
 
         const data = await res.json();
+        const tokenIds = Array.isArray(data.tokenIds)
+          ? data.tokenIds.map((id: unknown) => String(id))
+          : [];
+        const outcomeIndex = outcome === "Down" ? 1 : 0;
+        const oppositeOutcomeIndex = outcomeIndex === 0 ? 1 : 0;
+
         setSlug(String(data.slug ?? ""));
-        setTokenId(String(data.tokenId ?? ""));
+        setTokenId(String(tokenIds[outcomeIndex] ?? data.tokenId ?? ""));
+        setNoTokenId(String(tokenIds[oppositeOutcomeIndex] ?? ""));
         setTickSize(String(data.tickSize ?? "0.001") as TickSize);
         const mappedBids: OrderbookLevel[] = (data.bids ?? []).map(
           (lvl: { price: string | number; size: string | number }) => ({
@@ -1167,6 +1219,7 @@ function DraggableOrderbookWindow({
           draft={draft}
           onSelect={setDraft}
           tokenId={tokenId}
+          noTokenId={noTokenId}
           tickSize={tickSize}
           onPlaceOrder={onPlaceOrder}
           settings={settings}
@@ -1808,32 +1861,78 @@ export default function ScalpTerminal() {
     const normalizedTradingWallet = tradingWalletAddress.toLowerCase();
     const normalizedSafeAddress = safeAddress?.toLowerCase();
 
+    rememberDepositWalletAddress(address, tradingWalletAddress).catch((error) =>
+      console.warn("Failed to persist deposit wallet address", error),
+    );
+
     if (
       typeof window !== "undefined" &&
       safeAddress &&
       normalizedSafeAddress !== normalizedTradingWallet
     ) {
       window.localStorage.removeItem(`poly_creds_${safeAddress}`);
+      window.localStorage.removeItem(
+        `poly_creds_v2_proxy_${normalizedSafeAddress}`,
+      );
+      window.localStorage.removeItem(
+        `poly_creds_v2_gnosis-safe_${normalizedSafeAddress}`,
+      );
     }
 
     if (normalizedSafeAddress !== normalizedTradingWallet) {
       setSafeAddress(tradingWalletAddress);
     }
 
-    const client = await initPolymarketClient(signer, tradingWalletAddress);
+    const client = await initPolymarketClient(
+      signer,
+      tradingWalletAddress,
+      "deposit-wallet",
+    );
     const side = draft.side === "BUY" ? Side.BUY : Side.SELL;
     const price = Number(draft.price.toFixed(3));
+    const clobShareSize = toClobShareSize(size, price);
 
-    return client.createAndPostOrder(
+    if (!Number.isFinite(clobShareSize) || clobShareSize <= 0) {
+      throw new Error("Invalid order notional or price.");
+    }
+
+    const order = await client.createOrder(
       {
         tokenID: draft.tokenId,
         price,
         side,
-        size,
+        size: clobShareSize,
       },
       { tickSize: draft.tickSize ?? "0.001" },
+    );
+
+    const signedOrder = order as {
+      maker?: string;
+      signer?: string;
+      signatureType?: number;
+    };
+
+    if (signedOrder.maker?.toLowerCase() !== normalizedTradingWallet) {
+      throw new Error(
+        `Order maker mismatch. Expected deposit wallet ${tradingWalletAddress}, got ${
+          signedOrder.maker ?? "unknown"
+        }.`,
+      );
+    }
+
+    if (signedOrder.signatureType !== SignatureTypeV2.POLY_1271) {
+      throw new Error(
+        `Order signature flow mismatch. Expected deposit wallet signature type ${SignatureTypeV2.POLY_1271}, got ${
+          signedOrder.signatureType ?? "unknown"
+        }.`,
+      );
+    }
+
+    return client.postOrder(
+      order,
       OrderType.GTC,
       postOnly ?? tradingSettings.postOnly,
+      false,
     );
   };
 

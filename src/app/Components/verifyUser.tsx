@@ -9,9 +9,11 @@ import type { ethers } from "ethers";
 const HOST = "https://clob.polymarket.com";
 const CHAIN = 137;
 
+type WalletFlow = "deposit-wallet" | "proxy" | "gnosis-safe";
+
 type ApiKeyCapableClient = ClobClient & {
-  createOrDeriveApiKey?: () => Promise<ApiKeyCreds>;
   createApiKey: () => Promise<ApiKeyCreds>;
+  deriveApiKey: () => Promise<ApiKeyCreds>;
 };
 
 function isApiKeyCreds(value: unknown): value is ApiKeyCreds {
@@ -29,12 +31,28 @@ function isApiKeyCreds(value: unknown): value is ApiKeyCreds {
   );
 }
 
+function getSignatureType(flow: WalletFlow) {
+  if (flow === "deposit-wallet") return SignatureTypeV2.POLY_1271;
+  if (flow === "gnosis-safe") return SignatureTypeV2.POLY_GNOSIS_SAFE;
+  return SignatureTypeV2.POLY_PROXY;
+}
+
 export async function initPolymarketClient(
   signer: ethers.Signer,
   proxyAddress: string,
+  flow: WalletFlow = "proxy",
 ) {
-  const STORAGE_KEY = `poly_creds_${proxyAddress}`;
+  const normalizedProxyAddress = proxyAddress.toLowerCase();
+  const signatureType = getSignatureType(flow);
+  const STORAGE_KEY = `poly_creds_v2_${flow}_${normalizedProxyAddress}`;
+  const LEGACY_STORAGE_KEY = `poly_creds_${proxyAddress}`;
+  const LEGACY_NORMALIZED_STORAGE_KEY = `poly_creds_${normalizedProxyAddress}`;
   const clobSigner = signer as unknown as ClobClientOptions["signer"];
+
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_NORMALIZED_STORAGE_KEY);
+  }
 
   const savedCreds =
     typeof window !== "undefined"
@@ -55,8 +73,10 @@ export async function initPolymarketClient(
         chain: CHAIN,
         signer: clobSigner,
         creds,
-        signatureType: SignatureTypeV2.POLY_PROXY,
-        funderAddress: proxyAddress,
+        signatureType,
+        funderAddress: normalizedProxyAddress,
+        retryOnError: true,
+        throwOnError: true,
       });
 
       return client;
@@ -71,16 +91,19 @@ export async function initPolymarketClient(
     host: HOST,
     chain: CHAIN,
     signer: clobSigner,
-    signatureType: SignatureTypeV2.POLY_PROXY,
-    funderAddress: proxyAddress,
+    signatureType,
+    funderAddress: normalizedProxyAddress,
+    retryOnError: true,
+    throwOnError: true,
   }) as ApiKeyCapableClient;
 
   let apiCreds: ApiKeyCreds;
   try {
-    if (typeof tempClient.createOrDeriveApiKey === "function") {
-      apiCreds = await tempClient.createOrDeriveApiKey();
-    } else {
+    try {
       apiCreds = await tempClient.createApiKey();
+    } catch (createError) {
+      console.warn("create api key failed, deriving existing key", createError);
+      apiCreds = await tempClient.deriveApiKey();
     }
   } catch (e) {
     console.error("failed to create/derive api key", e);
@@ -103,8 +126,10 @@ export async function initPolymarketClient(
     chain: CHAIN,
     signer: clobSigner,
     creds: apiCreds,
-    signatureType: SignatureTypeV2.POLY_PROXY,
-    funderAddress: proxyAddress,
+    signatureType,
+    funderAddress: normalizedProxyAddress,
+    retryOnError: true,
+    throwOnError: true,
   });
 
   return client;
