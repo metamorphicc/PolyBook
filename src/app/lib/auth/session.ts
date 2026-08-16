@@ -34,6 +34,17 @@ export async function setSessionCookie(token: string) {
   });
 }
 
+export async function clearSessionCookie() {
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+}
+
 export async function readSession(): Promise<SessionPayload | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;

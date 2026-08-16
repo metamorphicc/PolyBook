@@ -3,11 +3,20 @@ import {
   buildHmacSignature,
 } from "@polymarket/builder-signing-sdk";
 import { serverEnv } from "@/app/lib/env";
+import { readSession } from "@/app/lib/auth/session";
 
 const MAX_BODY_LENGTH = 50000;
 
 export async function POST(request: NextRequest) {
   try {
+    // This route hands back the app's builder credentials (API key + passphrase)
+    // and a valid signature for the requested path. Only signed-in wallets may
+    // call it, otherwise anyone could mint builder-authed relayer requests.
+    const session = await readSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { method, path, body } = await request.json();
 
     if (typeof method !== "string" || typeof path !== "string") {

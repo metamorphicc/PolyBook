@@ -119,6 +119,7 @@ export default function Header() {
         const tradingRes = await fetch(
           `/api/user/trading-wallet?address=${address}`,
         );
+        if (!tradingRes.ok) return;
         const tradingData = await tradingRes.json();
         if (!cancelled) {
           setTradingWallet(
@@ -131,9 +132,14 @@ export default function Header() {
     };
 
     initAccount();
+    // The session cookie is established asynchronously after connect (SessionSync),
+    // and the deposit address is persisted after wallet derivation. Refetch when
+    // either lands so the deposit modal shows the right address without a reload.
+    window.addEventListener("polybook:trading-wallet-updated", initAccount);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("polybook:trading-wallet-updated", initAccount);
     };
   }, [address, isConnected]);
 

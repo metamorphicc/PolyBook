@@ -7,43 +7,6 @@ interface TradingWalletRow extends RowDataPacket {
   deposit_wallet_address: string | null;
 }
 
-type DatabaseError = Error & {
-  code?: string;
-  errno?: number;
-};
-
-function isMissingDepositWalletColumn(error: unknown) {
-  const dbError = error as DatabaseError;
-  return dbError.code === "ER_BAD_FIELD_ERROR" || dbError.errno === 1054;
-}
-
-function isSafeAddressRequired(error: unknown) {
-  const dbError = error as DatabaseError;
-  return dbError.code === "ER_NO_DEFAULT_FOR_FIELD" || dbError.errno === 1364;
-}
-
-async function ensureDepositWalletColumn() {
-  try {
-    await pool.query(
-      "ALTER TABLE users ADD COLUMN deposit_wallet_address varchar(42) NULL UNIQUE AFTER safe_address",
-    );
-  } catch (error: unknown) {
-    const dbError = error as DatabaseError;
-    if (dbError.code !== "ER_DUP_FIELDNAME" && dbError.errno !== 1060) {
-      throw error;
-    }
-  }
-}
-
-async function ensureSafeAddressNullable() {
-  await pool.query("ALTER TABLE users MODIFY safe_address varchar(42) NULL");
-}
-
-async function ensureTradingWalletSchema() {
-  await ensureDepositWalletColumn();
-  await ensureSafeAddressNullable();
-}
-
 async function getDepositWalletAddress(ownerAddress: string) {
   const [rows] = await pool.query<TradingWalletRow[]>(
     "SELECT deposit_wallet_address FROM users WHERE address = ?",
@@ -69,34 +32,21 @@ async function upsertDepositWalletAddress(
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const address = searchParams.get("address");
-
-    if (!isAddress(address)) {
-      return NextResponse.json(
-        { error: "valid address is required" },
-        { status: 400 },
-      );
+    const session = await readSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const normalizedAddress = address.toLowerCase();
-    const session = await readSession();
-    if (session && session.address !== normalizedAddress) {
+    // The owner is always the authenticated wallet — never trust the client.
+    // A mismatched ?address= param is a clear client bug, so surface it.
+    const requested = new URL(request.url).searchParams.get("address");
+    if (requested && requested.toLowerCase() !== session.address) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    let depositWalletAddress: string | null;
-    try {
-      depositWalletAddress = await getDepositWalletAddress(normalizedAddress);
-    } catch (error: unknown) {
-      if (!isMissingDepositWalletColumn(error)) throw error;
-      await ensureTradingWalletSchema();
-      depositWalletAddress = await getDepositWalletAddress(normalizedAddress);
-    }
+    const depositWalletAddress = await getDepositWalletAddress(session.address);
 
-    return NextResponse.json({
-      depositWalletAddress,
-    });
+    return NextResponse.json({ depositWalletAddress });
   } catch (error: unknown) {
     console.error("GET /api/user/trading-wallet error:", error);
     return NextResponse.json(
@@ -108,41 +58,29 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const session = await readSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
-    const { ownerAddress, depositWalletAddress } = body as {
-      ownerAddress?: string;
+    const { depositWalletAddress } = body as {
       depositWalletAddress?: string;
     };
 
-    if (!isAddress(ownerAddress) || !isAddress(depositWalletAddress)) {
+    if (!isAddress(depositWalletAddress)) {
       return NextResponse.json(
-        { error: "valid ownerAddress and depositWalletAddress are required" },
+        { error: "valid depositWalletAddress is required" },
         { status: 400 },
       );
     }
 
-    const normalizedOwnerAddress = ownerAddress.toLowerCase();
+    // Owner is derived from the session — a caller can only write its own row.
     const normalizedDepositWalletAddress = depositWalletAddress.toLowerCase();
-    const session = await readSession();
-    if (session && session.address !== normalizedOwnerAddress) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    try {
-      await upsertDepositWalletAddress(
-        normalizedOwnerAddress,
-        normalizedDepositWalletAddress,
-      );
-    } catch (error: unknown) {
-      if (!isMissingDepositWalletColumn(error) && !isSafeAddressRequired(error)) {
-        throw error;
-      }
-      await ensureTradingWalletSchema();
-      await upsertDepositWalletAddress(
-        normalizedOwnerAddress,
-        normalizedDepositWalletAddress,
-      );
-    }
+    await upsertDepositWalletAddress(
+      session.address,
+      normalizedDepositWalletAddress,
+    );
 
     return NextResponse.json({
       ok: true,

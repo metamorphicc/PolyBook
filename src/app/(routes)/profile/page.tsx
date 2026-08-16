@@ -201,8 +201,8 @@ export default function Profile() {
             signer,
           );
           setTradingWallet(tradingWalletAddress);
-          saveDepositWalletAddress(address, tradingWalletAddress).catch((e) =>
-            console.warn("[profile trading wallet save skipped]:", e),
+          saveDepositWalletAddress(signer, address, tradingWalletAddress).catch(
+            (e) => console.warn("[profile trading wallet save skipped]:", e),
           );
         }
 

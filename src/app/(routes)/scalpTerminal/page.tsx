@@ -12,6 +12,8 @@ import {
   ensureDepositWalletWithRelayer,
   useEthersSigner,
 } from "@/app/Components/CustomConnect";
+import { ensureSiweSession } from "@/app/lib/auth/client";
+import type { ethers } from "ethers";
 import {
   OrderType,
   Side,
@@ -106,13 +108,16 @@ type PlaceOrderRequest = {
 };
 
 async function rememberDepositWalletAddress(
+  signer: ethers.Signer,
   ownerAddress: string,
   depositWalletAddress: string,
 ) {
+  await ensureSiweSession(signer, ownerAddress);
+
   const res = await fetch("/api/user/trading-wallet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ownerAddress, depositWalletAddress }),
+    body: JSON.stringify({ depositWalletAddress }),
   });
 
   if (!res.ok) {
@@ -1587,9 +1592,16 @@ export default function ScalpTerminal() {
     };
 
     loadTradingWallet();
+    // Refetch once the SIWE session cookie is set (SessionSync) or the address
+    // is persisted, so the terminal picks up the trading wallet without a reload.
+    window.addEventListener("polybook:trading-wallet-updated", loadTradingWallet);
 
     return () => {
       cancelled = true;
+      window.removeEventListener(
+        "polybook:trading-wallet-updated",
+        loadTradingWallet,
+      );
     };
   }, [address, isConnected]);
 
@@ -1865,8 +1877,9 @@ export default function ScalpTerminal() {
     const normalizedTradingWallet = tradingWalletAddress.toLowerCase();
     const normalizedKnownTradingWallet = knownTradingWalletAddress?.toLowerCase();
 
-    rememberDepositWalletAddress(address, tradingWalletAddress).catch((error) =>
-      console.warn("Failed to persist deposit wallet address", error),
+    rememberDepositWalletAddress(signer, address, tradingWalletAddress).catch(
+      (error) =>
+        console.warn("Failed to persist deposit wallet address", error),
     );
 
     if (

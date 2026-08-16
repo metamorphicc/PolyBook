@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { pool } from "../db";
 import { ethers } from "ethers";
 import { isAddress, setSessionCookie, signSession } from "@/app/lib/auth/session";
+import { NONCE_TTL_SECONDS } from "@/app/lib/auth/nonce";
 import type { RowDataPacket } from "mysql2";
 
 export async function POST(req: Request) {
@@ -17,12 +18,12 @@ export async function POST(req: Request) {
     const addr = address.toLowerCase();
 
     const [rows] = await pool.query<Array<RowDataPacket & { nonce: string }>>(
-      "SELECT nonce FROM login_nonces WHERE address = ? AND used = 0 ORDER BY id DESC LIMIT 1",
-      [addr]
+      "SELECT nonce FROM login_nonces WHERE address = ? AND used = 0 AND created_at >= (NOW() - INTERVAL ? SECOND) ORDER BY id DESC LIMIT 1",
+      [addr, NONCE_TTL_SECONDS]
     );
 
     if (!rows.length) {
-      return NextResponse.json({ error: "No nonce for this address" }, { status: 400 });
+      return NextResponse.json({ error: "No valid nonce for this address" }, { status: 400 });
     }
 
     const expectedNonce = rows[0].nonce;

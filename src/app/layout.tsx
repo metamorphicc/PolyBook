@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppKitProviderr } from "../../Provider";
 import { ModalProvider } from "./Components/Modal";
 import { ThemeProvider } from "./Components/ThemeProvider";
+import SessionSync from "./Components/SessionSync";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -33,7 +34,10 @@ export default function RootLayout({
           <ModalProvider>
             <div id="modal-root" />
             <div className="min-h-screen theme-bg">
-              <AppKitProviderr>{children}</AppKitProviderr>
+              <AppKitProviderr>
+                <SessionSync />
+                {children}
+              </AppKitProviderr>
             </div>
           </ModalProvider>
         </ThemeProvider>

@@ -16,6 +16,7 @@ import {
 } from "@polymarket/builder-signing-sdk";
 import { useModal } from "./Modal";
 import { WithdrawContent } from "./WithdrawContent";
+import { clearSiweSession, ensureSiweSession } from "../lib/auth/client";
 
 const RELAYER_URL = "https://relayer-v2.polymarket.com";
 const POLYGON_CHAIN_ID = 137;
@@ -122,6 +123,10 @@ export async function withdrawAllStablecoinsFromTradingWallet(
     throw new Error("Trading wallet does not have pUSD or USDC.e");
   }
 
+  // Executing the withdraw batch hits the builder-signer endpoint, which now
+  // requires a session — establish it before the relayer call.
+  await ensureSiweSession(signer, await signer.getAddress());
+
   const relayClient = createDepositWalletRelayClient(signer);
   const response = await relayClient.executeDepositWalletBatch(
     calls,
@@ -151,6 +156,10 @@ export async function withdrawAllStablecoinsFromTradingWallet(
 export async function ensureDepositWalletWithRelayer(
   signer: ethers.providers.JsonRpcSigner
 ) {
+  // Deploying the deposit wallet hits the builder-signer endpoint, which now
+  // requires a session — establish it up front so the relayer call is authed.
+  await ensureSiweSession(signer, await signer.getAddress());
+
   const relayClient = createDepositWalletRelayClient(signer);
 
   const walletAddress = await relayClient.deriveDepositWalletAddress();
@@ -190,14 +199,16 @@ export async function deriveDepositWalletAddressWithRelayer(
 }
 
 export async function saveDepositWalletAddress(
+  signer: ethers.Signer,
   ownerAddress: string,
   depositWalletAddress: string
 ) {
+  await ensureSiweSession(signer, ownerAddress);
+
   const res = await fetch("/api/user/trading-wallet", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      ownerAddress,
       depositWalletAddress,
     }),
   });
@@ -289,7 +300,7 @@ export default function CustomConnect({
               detail: { tradingWalletAddress: depositWalletAddress },
             }),
           );
-          saveDepositWalletAddress(address, depositWalletAddress).catch((e) =>
+          saveDepositWalletAddress(signer, address, depositWalletAddress).catch((e) =>
             console.warn("[trading wallet save skipped]:", e),
           );
         }
@@ -385,7 +396,10 @@ export default function CustomConnect({
           </button>
 
           <button
-            onClick={() => disconnect()}
+            onClick={() => {
+              clearSiweSession().catch(() => {});
+              disconnect();
+            }}
             className="border border-red-500/60 px-3 py-2 text-sm text-red-400 transition hover:bg-red-500/10"
           >
             Logout
