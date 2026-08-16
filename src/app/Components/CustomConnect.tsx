@@ -198,6 +198,23 @@ export async function deriveDepositWalletAddressWithRelayer(
   return relayClient.deriveDepositWalletAddress();
 }
 
+/**
+ * Reads a wallet's pUSD balance straight from the token contract.
+ *
+ * The onboarding flow needs this before the CLOB client exists — the client's
+ * own balance endpoint only works once trading has been enabled, which is the
+ * step *after* funding.
+ */
+export async function readPusdBalance(
+  provider: ethers.providers.Provider,
+  walletAddress: string
+) {
+  const contract = new ethers.Contract(PUSD_ADDRESS, ERC20_ABI, provider);
+  const raw = await contract.balanceOf(walletAddress);
+
+  return Number(ethers.utils.formatUnits(raw, 6));
+}
+
 export async function saveDepositWalletAddress(
   signer: ethers.Signer,
   ownerAddress: string,

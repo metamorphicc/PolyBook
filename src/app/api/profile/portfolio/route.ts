@@ -17,6 +17,8 @@ type RawPosition = {
   realizedPnl?: number;
   percentPnl?: number;
   endDate?: string;
+  asset?: string;
+  conditionId?: string;
 };
 
 type PortfolioPosition = {
@@ -34,10 +36,19 @@ type PortfolioPosition = {
   percentPnl: number;
   status: "Open" | "Closed";
   endDate: string;
+  // CLOB token id. The terminal matches a position to the ladder it is showing
+  // by comparing this against the ladder's tokenId, so it must survive
+  // normalization even though the profile view does not use it.
+  asset: string;
+  conditionId: string;
 };
 
 export async function GET(req: NextRequest) {
   const user = req.nextUrl.searchParams.get("user");
+  // The terminal polls open positions every few seconds; closed positions and
+  // portfolio value are two extra upstream calls it never reads, so it asks for
+  // scope=open and gets a single fetch.
+  const openOnly = req.nextUrl.searchParams.get("scope") === "open";
 
   if (!user || !/^0x[a-fA-F0-9]{40}$/.test(user)) {
     return NextResponse.json(
@@ -49,8 +60,10 @@ export async function GET(req: NextRequest) {
   try {
     const [openPositions, closedPositions, valueRows] = await Promise.all([
       fetchPositions("positions", user),
-      fetchPositions("closed-positions", user),
-      fetchValue(user),
+      openOnly
+        ? Promise.resolve([] as RawPosition[])
+        : fetchPositions("closed-positions", user),
+      openOnly ? Promise.resolve([]) : fetchValue(user),
     ]);
 
     const active = openPositions
@@ -150,5 +163,7 @@ function normalizePosition(
     percentPnl: Number(position.percentPnl ?? 0),
     status,
     endDate: position.endDate ?? "",
+    asset: position.asset ? String(position.asset) : "",
+    conditionId: position.conditionId ?? "",
   };
 }

@@ -19,13 +19,13 @@ type PriceView = {
 
 const ASSETS: Asset[] = ["BTC", "ETH", "SOL", "XRP"];
 
-function pickTwoAssets() {
-  const shuffled = [...ASSETS].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, 2);
-}
-
-function MarketPrices() {
-  const [assets] = useState<Asset[]>(() => pickTwoAssets());
+/**
+ * The four fast-market assets, always in the same order.
+ *
+ * This used to shuffle and show two of them, which meant the header changed on
+ * every reload — noise in a place a trader reads for reference prices.
+ */
+function MarketPrices({ compact = false }: { compact?: boolean }) {
   const [prices, setPrices] = useState<PriceView[]>([]);
 
   useEffect(() => {
@@ -33,7 +33,7 @@ function MarketPrices() {
 
     const fetchPrices = async () => {
       try {
-        const res = await fetch(`/api/crypto/prices?assets=${assets.join(",")}`, {
+        const res = await fetch(`/api/crypto/prices?assets=${ASSETS.join(",")}`, {
           cache: "no-store",
         });
         if (!res.ok) return;
@@ -50,32 +50,48 @@ function MarketPrices() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [assets]);
+  }, []);
 
   const displayPrices = useMemo(
     () =>
-      assets.map((asset) => {
+      ASSETS.map((asset) => {
         const price = prices.find((item) => item.asset === asset);
         return price ?? { asset, price: null, changePercent: null };
       }),
-    [assets, prices],
+    [prices],
   );
 
   return (
-    <div className="hidden min-w-[260px] items-center justify-center gap-2 lg:flex">
+    <div
+      className={`hidden items-center justify-center lg:flex ${
+        compact ? "gap-1.5" : "min-w-[260px] gap-2"
+      }`}
+    >
       {displayPrices.map((item) => {
         const positive = (item.changePercent ?? 0) >= 0;
 
         return (
           <div
             key={item.asset}
-            className="flex min-w-[118px] items-center justify-between border theme-border bg-[var(--surface-muted)] px-3 py-2"
+            className={`flex items-center justify-between border theme-border bg-[var(--surface-muted)] ${
+              compact
+                ? "min-w-[92px] gap-2 px-2 py-1"
+                : "min-w-[118px] px-3 py-2"
+            }`}
           >
             <div className="flex flex-col">
-              <span className="text-[10px] font-semibold theme-muted">
+              <span
+                className={`font-semibold theme-muted ${
+                  compact ? "text-[9px]" : "text-[10px]"
+                }`}
+              >
                 {item.asset}
               </span>
-              <span className="font-mono text-[13px] text-[var(--foreground)]">
+              <span
+                className={`font-mono text-[var(--foreground)] ${
+                  compact ? "text-[11px]" : "text-[13px]"
+                }`}
+              >
                 {item.price === null
                   ? "--"
                   : `$${item.price.toLocaleString("en-US", {
@@ -84,7 +100,7 @@ function MarketPrices() {
               </span>
             </div>
             <span
-              className={`font-mono text-[11px] ${
+              className={`font-mono ${compact ? "text-[10px]" : "text-[11px]"} ${
                 positive ? "text-green-400" : "text-red-400"
               }`}
             >
@@ -99,7 +115,8 @@ function MarketPrices() {
   );
 }
 
-export default function Header() {
+/** `compact` trims the chrome for the terminal dock, which budgets its height. */
+export default function Header({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const { openModal, closeModal } = useModal();
   const { address, isConnected } = useAppKitAccount();
@@ -153,8 +170,12 @@ export default function Header() {
   };
 
   return (
-    <header className="w-full border-b theme-border theme-surface">
-      <div className="mx-auto flex h-[70px] w-full max-w-[1600px] items-center gap-4 px-5">
+    <header className="w-full shrink-0 border-b theme-border theme-surface">
+      <div
+        className={`mx-auto flex w-full items-center gap-4 px-5 ${
+          compact ? "h-[46px] max-w-none" : "h-[70px] max-w-[1600px]"
+        }`}
+      >
         <button
           type="button"
           className="flex shrink-0 cursor-pointer items-center gap-3"
@@ -163,25 +184,30 @@ export default function Header() {
           <Image
             src="/logo_blue.jpg"
             alt="PolyBook"
-            width={36}
-            height={36}
+            width={compact ? 24 : 36}
+            height={compact ? 24 : 36}
             className="object-contain"
           />
           <div className="flex items-baseline gap-3">
-            <span className="text-[21px] mr-10 font-semibold leading-none">
+            <span
+              className={`font-semibold leading-none ${
+                compact ? "text-[15px]" : "mr-10 text-[21px]"
+              }`}
+            >
               PolyBook
             </span>
-            
           </div>
         </button>
 
-        <MarketPrices />
+        <MarketPrices compact={compact} />
 
         <nav className="ml-auto hidden items-center gap-1 md:flex">
           <button
             type="button"
             onClick={() => router.push("/")}
-            className="px-3 py-2 text-sm theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+            className={`theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] ${
+              compact ? "px-2 py-1 text-xs" : "px-3 py-2 text-sm"
+            }`}
           >
             Terminal
           </button>
@@ -189,14 +215,18 @@ export default function Header() {
             type="button"
             disabled={!tradingWallet}
             onClick={handleDeposit}
-            className="px-3 py-2 text-sm theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+            className={`theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent ${
+              compact ? "px-2 py-1 text-xs" : "px-3 py-2 text-sm"
+            }`}
           >
             Deposit
           </button>
           <button
             type="button"
             onClick={() => router.push("/profile")}
-            className="px-3 py-2 text-sm theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+            className={`theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] ${
+              compact ? "px-2 py-1 text-xs" : "px-3 py-2 text-sm"
+            }`}
           >
             Profile
           </button>

@@ -8,7 +8,28 @@ export type PolymarketMarket = {
   outcomes?: string[] | string;
   clobTokenIds?: string[] | string;
   tokenId?: string;
+  // Gamma returns the resolution time under one of these; used for the
+  // terminal countdown. Field naming varies by market, so read both.
+  endDate?: string;
+  endDateIso?: string;
 };
+
+/**
+ * Resolution time of a market as a unix timestamp in seconds, or null when the
+ * upstream payload has no usable date.
+ */
+export function marketEndTimestamp(
+  market: Pick<PolymarketMarket, "endDate" | "endDateIso">,
+): number | null {
+  for (const value of [market.endDate, market.endDateIso]) {
+    if (!value) continue;
+
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
+  }
+
+  return null;
+}
 
 export async function getMarketBySlug(slug: string) {
   const url = `${MARKETS_URL}?slug=${encodeURIComponent(slug)}&limit=1`;

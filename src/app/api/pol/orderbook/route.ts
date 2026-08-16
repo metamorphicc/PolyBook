@@ -1,13 +1,11 @@
 // app/api/pol/orderbook/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import type { Asset, Timeframe } from "@/app/lib/polymarket/time";
 import {
-  getPolymarketServerTime,
-  alignTimestampToWindow,
-  makeUpdownSlugCandidates,
-  type Asset,
-  type Timeframe,
-} from "@/app/lib/polymarket/time";
-import { getMarketBySlug } from "@/app/lib/polymarket/markets";
+  currentServerTime,
+  fastMarketSlugCandidates,
+  resolveFastMarket,
+} from "@/app/lib/polymarket/fastMarket";
 
 const ORDERBOOK_URL = "https://clob.polymarket.com/book";
 const VALID_ASSETS = new Set<Asset>(["BTC", "ETH", "SOL", "XRP"]);
@@ -35,44 +33,29 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const serverTs = await getPolymarketServerTime();
+    const serverTs = await currentServerTime();
+    const market = await resolveFastMarket(asset, timeframe, serverTs);
 
-    const alignedTs = alignTimestampToWindow(serverTs, timeframe);
-
-    const slugs = makeUpdownSlugCandidates(asset, timeframe, alignedTs);
-
-    let marketResult: Awaited<ReturnType<typeof getMarketBySlug>> | null = null;
-    let resolvedSlug = "";
-
-    for (const slug of slugs) {
-      try {
-        marketResult = await getMarketBySlug(slug);
-        resolvedSlug = slug;
-        break;
-      } catch (e) {
-        console.warn("[/api/pol/orderbook] slug miss:", slug, e);
-      }
-    }
-
-    if (!marketResult) {
+    if (!market) {
       return NextResponse.json(
         {
           error: "Fast market not found",
-          triedSlugs: slugs,
+          triedSlugs: fastMarketSlugCandidates(asset, timeframe, serverTs),
+          serverTs,
         },
         { status: 404 },
       );
     }
 
     const outcomeIndex = outcomeParam === "down" ? 1 : 0;
-    const tokenId = marketResult.tokenIds[outcomeIndex] ?? marketResult.tokenId;
-    const outcome = marketResult.outcomes[outcomeIndex] ?? (outcomeIndex ? "Down" : "Up");
+    const tokenId = market.tokenIds[outcomeIndex] ?? market.tokenId;
+    const outcome = market.outcomes[outcomeIndex] ?? (outcomeIndex ? "Down" : "Up");
 
     const url = `${ORDERBOOK_URL}?token_id=${encodeURIComponent(
       String(tokenId),
     )}`;
 
-    const obRes = await fetch(url);
+    const obRes = await fetch(url, { cache: "no-store" });
 
     if (!obRes.ok) {
       const text = await obRes.text();
@@ -81,7 +64,7 @@ export async function GET(req: NextRequest) {
           error: "Failed to fetch orderbook from Polymarket",
           status: obRes.status,
           body: text,
-          slug: resolvedSlug,
+          slug: market.slug,
           tokenId,
         },
         { status: 502 },
@@ -92,18 +75,22 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(
       {
-        slug: resolvedSlug,
-        marketId: marketResult.marketId,
-        conditionId: marketResult.conditionId,
+        slug: market.slug,
+        marketId: market.marketId,
+        conditionId: market.conditionId,
         tokenId,
-        tokenIds: marketResult.tokenIds,
-        outcomes: marketResult.outcomes,
+        tokenIds: market.tokenIds,
+        outcomes: market.outcomes,
         outcome,
         bids: ob.bids ?? [],
         asks: ob.asks ?? [],
         tickSize: ob.tick_size,
         minOrderSize: ob.min_order_size,
         timestamp: ob.timestamp,
+        // Countdown inputs: when this window resolves, and the clock that time is
+        // measured against so the client can tick locally between polls.
+        endTs: market.endTs,
+        serverTs,
       },
       { status: 200 },
     );
