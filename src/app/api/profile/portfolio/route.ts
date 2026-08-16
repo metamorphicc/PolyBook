@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     const settled = wins + losses;
 
     return NextResponse.json({
-      safeAddress: user,
+      tradingWalletAddress: user,
       value: valueRows[0]?.value ?? 0,
       active,
       history,

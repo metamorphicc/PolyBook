@@ -1550,7 +1550,9 @@ export default function ScalpTerminal() {
   );
   const [nextId, setNextId] = useState(1);
   const [activeWindowId, setActiveWindowId] = useState<number | null>(null);
-  const [safeAddress, setSafeAddress] = useState<string | null>(null);
+  const [knownTradingWalletAddress, setKnownTradingWalletAddress] = useState<
+    string | null
+  >(null);
   const [workspaceBounds, setWorkspaceBounds] = useState<WorkspaceBounds>({
     width: 1200,
     height: 720,
@@ -1561,28 +1563,30 @@ export default function ScalpTerminal() {
 
   useEffect(() => {
     if (!isConnected || !address) {
-      window.setTimeout(() => setSafeAddress(null), 0);
+      window.setTimeout(() => setKnownTradingWalletAddress(null), 0);
       return;
     }
 
     let cancelled = false;
 
-    const loadSafe = async () => {
+    const loadTradingWallet = async () => {
       try {
-        const res = await fetch(`/api/user/safe?address=${address}`, {
+        const res = await fetch(`/api/user/trading-wallet?address=${address}`, {
           cache: "no-store",
         });
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) {
-          setSafeAddress((data.safeAddress as string | null) ?? null);
+          setKnownTradingWalletAddress(
+            (data.depositWalletAddress as string | null) ?? null,
+          );
         }
       } catch (e) {
-        console.error("[ScalpTerminal] failed to load safe:", e);
+        console.error("[ScalpTerminal] failed to load trading wallet:", e);
       }
     };
 
-    loadSafe();
+    loadTradingWallet();
 
     return () => {
       cancelled = true;
@@ -1859,7 +1863,7 @@ export default function ScalpTerminal() {
 
     const tradingWalletAddress = await ensureDepositWalletWithRelayer(signer);
     const normalizedTradingWallet = tradingWalletAddress.toLowerCase();
-    const normalizedSafeAddress = safeAddress?.toLowerCase();
+    const normalizedKnownTradingWallet = knownTradingWalletAddress?.toLowerCase();
 
     rememberDepositWalletAddress(address, tradingWalletAddress).catch((error) =>
       console.warn("Failed to persist deposit wallet address", error),
@@ -1867,20 +1871,20 @@ export default function ScalpTerminal() {
 
     if (
       typeof window !== "undefined" &&
-      safeAddress &&
-      normalizedSafeAddress !== normalizedTradingWallet
+      knownTradingWalletAddress &&
+      normalizedKnownTradingWallet !== normalizedTradingWallet
     ) {
-      window.localStorage.removeItem(`poly_creds_${safeAddress}`);
+      window.localStorage.removeItem(`poly_creds_${knownTradingWalletAddress}`);
       window.localStorage.removeItem(
-        `poly_creds_v2_proxy_${normalizedSafeAddress}`,
+        `poly_creds_v2_proxy_${normalizedKnownTradingWallet}`,
       );
       window.localStorage.removeItem(
-        `poly_creds_v2_gnosis-safe_${normalizedSafeAddress}`,
+        `poly_creds_v2_gnosis-safe_${normalizedKnownTradingWallet}`,
       );
     }
 
-    if (normalizedSafeAddress !== normalizedTradingWallet) {
-      setSafeAddress(tradingWalletAddress);
+    if (normalizedKnownTradingWallet !== normalizedTradingWallet) {
+      setKnownTradingWalletAddress(tradingWalletAddress);
     }
 
     const client = await initPolymarketClient(

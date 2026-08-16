@@ -4,13 +4,13 @@ import { useMemo, useState } from "react";
 import { ethers } from "ethers";
 
 type WithdrawContentProps = {
-  safeAddress: string;
+  walletAddress: string;
   closeModal: () => void;
   onSend: (destinationAddress: string) => Promise<string>;
 };
 
 export function WithdrawContent({
-  safeAddress,
+  walletAddress,
   closeModal,
   onSend,
 }: WithdrawContentProps) {
@@ -52,16 +52,16 @@ export function WithdrawContent({
           Withdraw
         </h2>
         <p className="mt-1 text-sm theme-muted">
-          Send available stablecoin balance from your Safe.
+          Send available stablecoin balance from your trading wallet.
         </p>
       </div>
 
       <div className="border theme-border bg-[var(--surface-muted)] p-3">
         <div className="text-[11px] uppercase tracking-wide theme-muted">
-          Safe
+          Trading wallet
         </div>
         <div className="mt-1 break-all font-mono text-xs text-[var(--foreground)]">
-          {safeAddress}
+          {walletAddress}
         </div>
       </div>
 

@@ -2,6 +2,11 @@
 
 import Header from "@/app/Components/header";
 import {
+  deriveDepositWalletAddressWithRelayer,
+  saveDepositWalletAddress,
+  useEthersSigner,
+} from "@/app/Components/CustomConnect";
+import {
   DEFAULT_TRADING_SETTINGS,
   readTradingSettings,
   type FastAsset,
@@ -39,7 +44,7 @@ type PortfolioStats = {
 };
 
 type PortfolioResponse = {
-  safeAddress: string;
+  tradingWalletAddress: string;
   value: number;
   active: PortfolioPosition[];
   history: PortfolioPosition[];
@@ -52,7 +57,7 @@ const SETTINGS_ASSETS: FastAsset[] = ["BTC", "ETH", "SOL", "XRP"];
 const SETTINGS_TIMEFRAMES: FastTimeframe[] = ["5m", "15m", "1h"];
 
 const MOCK_PORTFOLIO: PortfolioResponse = {
-  safeAddress: "0x0000000000000000000000000000000000000000",
+  tradingWalletAddress: "0x0000000000000000000000000000000000000000",
   value: 428.74,
   active: [
     {
@@ -145,8 +150,9 @@ const MOCK_PORTFOLIO: PortfolioResponse = {
 
 export default function Profile() {
   const { address, isConnected } = useAppKitAccount();
+  const signer = useEthersSigner();
   const [loading, setLoading] = useState(false);
-  const [safe, setSafe] = useState<string | null>(null);
+  const [tradingWallet, setTradingWallet] = useState<string | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [activeTab, setActiveTab] = useState<"portfolio" | "settings">(
     "portfolio",
@@ -168,7 +174,7 @@ export default function Profile() {
   useEffect(() => {
     if (!isConnected || !address) {
       window.setTimeout(() => {
-        setSafe(null);
+        setTradingWallet(null);
         setPortfolio(null);
       }, 0);
       return;
@@ -177,24 +183,38 @@ export default function Profile() {
     const getProfileData = async () => {
       setLoading(true);
       try {
-        const safeRes = await fetch(`/api/user/safe?address=${address}`);
-        if (!safeRes.ok) {
-          setSafe(null);
+        const tradingWalletRes = await fetch(
+          `/api/user/trading-wallet?address=${address}`,
+        );
+        if (!tradingWalletRes.ok) {
+          setTradingWallet(null);
           setPortfolio(null);
           return;
         }
 
-        const safeData = await safeRes.json();
-        const safeAddr = (safeData.safeAddress as string | null) ?? null;
-        setSafe(safeAddr);
+        const tradingWalletData = await tradingWalletRes.json();
+        let tradingWalletAddress =
+          (tradingWalletData.depositWalletAddress as string | null) ?? null;
 
-        if (!safeAddr) {
+        if (!tradingWalletAddress && signer) {
+          tradingWalletAddress = await deriveDepositWalletAddressWithRelayer(
+            signer,
+          );
+          setTradingWallet(tradingWalletAddress);
+          saveDepositWalletAddress(address, tradingWalletAddress).catch((e) =>
+            console.warn("[profile trading wallet save skipped]:", e),
+          );
+        }
+
+        setTradingWallet(tradingWalletAddress);
+
+        if (!tradingWalletAddress) {
           setPortfolio(null);
           return;
         }
 
         const portfolioRes = await fetch(
-          `/api/profile/portfolio?user=${safeAddr}`,
+          `/api/profile/portfolio?user=${tradingWalletAddress}`,
         );
 
         if (!portfolioRes.ok) {
@@ -212,7 +232,18 @@ export default function Profile() {
     };
 
     getProfileData();
-  }, [isConnected, address]);
+    window.addEventListener(
+      "polybook:trading-wallet-updated",
+      getProfileData,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "polybook:trading-wallet-updated",
+        getProfileData,
+      );
+    };
+  }, [isConnected, address, signer]);
 
   const hasRealPortfolio =
     Boolean(portfolio?.active.length) || Boolean(portfolio?.history.length);
@@ -220,7 +251,9 @@ export default function Profile() {
     hasRealPortfolio && portfolio ? portfolio : MOCK_PORTFOLIO;
   const stats = displayPortfolio.stats;
   const totalPnl = stats?.totalPnl ?? 0;
-  const shortSafe = safe ? `${safe.slice(0, 6)}...${safe.slice(-4)}` : "--";
+  const shortTradingWallet = tradingWallet
+    ? `${tradingWallet.slice(0, 6)}...${tradingWallet.slice(-4)}`
+    : "--";
 
   const profileName = useMemo(() => {
     if (!address) return "Guest";
@@ -291,7 +324,7 @@ export default function Profile() {
                 {profileName}
               </div>
               <div className="mt-1 font-mono text-xs theme-muted">
-                Safe: {shortSafe}
+                Trading wallet: {shortTradingWallet}
               </div>
 
               <div className="mt-3 flex items-center gap-2">
@@ -363,7 +396,7 @@ export default function Profile() {
               ) : displayPortfolio.history.length ? (
                 <PositionList positions={displayPortfolio.history} />
               ) : (
-                <EmptyState text="No history for this Safe yet." />
+                <EmptyState text="No trading history for this wallet yet." />
               )}
             </Panel>
 
