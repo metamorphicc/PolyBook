@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Asset = "BTC" | "ETH" | "SOL" | "XRP";
 type Timeframe = "5m" | "15m" | "1h";
@@ -21,14 +21,19 @@ type PolymarketPriceChartProps = {
   timeframe: Timeframe;
 };
 
-const VIEWBOX_WIDTH = 920;
-const VIEWBOX_HEIGHT = 460;
-const PAD = {
-  top: 26,
-  right: 58,
-  bottom: 34,
-  left: 46,
+/** The plot box in real pixels, measured from the container. */
+type Box = {
+  width: number;
+  height: number;
 };
+
+const PAD = {
+  top: 14,
+  right: 52,
+  bottom: 22,
+  left: 12,
+};
+const LABEL_FONT_SIZE = 10;
 
 function normalizeTimestamp(timestamp: number) {
   return timestamp > 1e12 ? Math.floor(timestamp / 1000) : timestamp;
@@ -58,11 +63,11 @@ function formatTime(timestamp: number) {
   }).format(new Date(timestamp * 1000));
 }
 
-function buildLinePath(points: ChartPoint[]) {
+function buildLinePath(points: ChartPoint[], box: Box) {
   if (points.length === 0) return "";
 
-  const plotWidth = VIEWBOX_WIDTH - PAD.left - PAD.right;
-  const plotHeight = VIEWBOX_HEIGHT - PAD.top - PAD.bottom;
+  const plotWidth = box.width - PAD.left - PAD.right;
+  const plotHeight = box.height - PAD.top - PAD.bottom;
   const minTime = points[0].time;
   const maxTime = points[points.length - 1].time;
   const timeRange = Math.max(1, maxTime - minTime);
@@ -76,12 +81,12 @@ function buildLinePath(points: ChartPoint[]) {
     .join(" ");
 }
 
-function buildAreaPath(points: ChartPoint[]) {
-  const linePath = buildLinePath(points);
+function buildAreaPath(points: ChartPoint[], box: Box) {
+  const linePath = buildLinePath(points, box);
   if (!linePath || points.length === 0) return "";
 
-  const plotWidth = VIEWBOX_WIDTH - PAD.left - PAD.right;
-  const plotBottom = VIEWBOX_HEIGHT - PAD.bottom;
+  const plotWidth = box.width - PAD.left - PAD.right;
+  const plotBottom = box.height - PAD.bottom;
   const minTime = points[0].time;
   const maxTime = points[points.length - 1].time;
   const timeRange = Math.max(1, maxTime - minTime);
@@ -101,24 +106,54 @@ export default function PolymarketPriceChart({
   const [slug, setSlug] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [box, setBox] = useState<Box>({ width: 0, height: 0 });
+
+  const plotRef = useRef<HTMLDivElement>(null);
+
+  // Measured so the SVG can be drawn at its real pixel size. The alternative —
+  // a fixed viewBox stretched to fit — scales every unit by a different factor
+  // on each axis, so font sizes and stroke widths come out both too large and
+  // horizontally squashed, and by an amount that changes with the window.
+  useEffect(() => {
+    const node = plotRef.current;
+    if (!node) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+
+      // Sub-pixel jitter from the flex layout would otherwise re-render the
+      // whole path set on every resize frame.
+      setBox((current) =>
+        Math.abs(current.width - rect.width) < 1 &&
+        Math.abs(current.height - rect.height) < 1
+          ? current
+          : { width: rect.width, height: rect.height },
+      );
+    });
+
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
 
   const points = useMemo(() => normalizeHistory(history), [history]);
-  const linePath = useMemo(() => buildLinePath(points), [points]);
-  const areaPath = useMemo(() => buildAreaPath(points), [points]);
+  const linePath = useMemo(() => buildLinePath(points, box), [box, points]);
+  const areaPath = useMemo(() => buildAreaPath(points, box), [box, points]);
   const latest = points.at(-1);
   const first = points.at(0);
 
   const latestX = useMemo(() => {
     if (!latest || points.length === 0) return PAD.left;
-    const plotWidth = VIEWBOX_WIDTH - PAD.left - PAD.right;
+    const plotWidth = box.width - PAD.left - PAD.right;
     const minTime = points[0].time;
     const maxTime = points[points.length - 1].time;
     const timeRange = Math.max(1, maxTime - minTime);
     return PAD.left + ((latest.time - minTime) / timeRange) * plotWidth;
-  }, [latest, points]);
+  }, [box.width, latest, points]);
 
   const latestY = latest
-    ? PAD.top + (1 - latest.price) * (VIEWBOX_HEIGHT - PAD.top - PAD.bottom)
+    ? PAD.top + (1 - latest.price) * (box.height - PAD.top - PAD.bottom)
     : PAD.top;
 
   useEffect(() => {
@@ -194,16 +229,15 @@ export default function PolymarketPriceChart({
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div ref={plotRef} className="relative min-h-0 flex-1 overflow-hidden">
         {points.length === 0 && !error ? (
           <div className="flex h-full items-center justify-center text-sm theme-muted">
             No Polymarket price history yet.
           </div>
-        ) : (
+        ) : box.width > 0 && box.height > 0 ? (
           <svg
             className="h-full w-full"
-            viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
-            preserveAspectRatio="none"
+            viewBox={`0 0 ${box.width} ${box.height}`}
             role="img"
             aria-label={`${asset} ${timeframe} ${outcome} probability chart`}
           >
@@ -216,23 +250,22 @@ export default function PolymarketPriceChart({
 
             {[0, 0.25, 0.5, 0.75, 1].map((level) => {
               const y =
-                PAD.top +
-                (1 - level) * (VIEWBOX_HEIGHT - PAD.top - PAD.bottom);
+                PAD.top + (1 - level) * (box.height - PAD.top - PAD.bottom);
               return (
                 <g key={level}>
                   <line
                     x1={PAD.left}
-                    x2={VIEWBOX_WIDTH - PAD.right}
+                    x2={box.width - PAD.right}
                     y1={y}
                     y2={y}
                     stroke="var(--terminal-grid)"
                     strokeWidth="1"
                   />
                   <text
-                    x={VIEWBOX_WIDTH - PAD.right + 10}
-                    y={y + 4}
+                    x={box.width - PAD.right + 8}
+                    y={y + 3}
                     fill="var(--muted)"
-                    fontSize="12"
+                    fontSize={LABEL_FONT_SIZE}
                     fontFamily="monospace"
                   >
                     {Math.round(level * 100)}%
@@ -248,7 +281,7 @@ export default function PolymarketPriceChart({
                   d={linePath}
                   fill="none"
                   stroke="#38bdf8"
-                  strokeWidth="2.4"
+                  strokeWidth="1.5"
                   strokeLinejoin="round"
                   strokeLinecap="round"
                 />
@@ -259,7 +292,7 @@ export default function PolymarketPriceChart({
               <>
                 <line
                   x1={PAD.left}
-                  x2={VIEWBOX_WIDTH - PAD.right}
+                  x2={box.width - PAD.right}
                   y1={latestY}
                   y2={latestY}
                   stroke="#38bdf8"
@@ -269,26 +302,25 @@ export default function PolymarketPriceChart({
                 <circle
                   cx={latestX}
                   cy={latestY}
-                  r="5"
+                  r="2.5"
                   fill="#38bdf8"
                   stroke="var(--terminal-bg)"
-                  strokeWidth="2"
+                  strokeWidth="1.5"
                 />
                 <rect
-                  x={VIEWBOX_WIDTH - PAD.right + 5}
-                  y={latestY - 13}
-                  width="48"
-                  height="22"
+                  x={box.width - PAD.right + 4}
+                  y={latestY - 7}
+                  width="38"
+                  height="14"
                   fill="#38bdf8"
                   rx="2"
                 />
                 <text
-                  x={VIEWBOX_WIDTH - PAD.right + 29}
+                  x={box.width - PAD.right + 23}
                   y={latestY + 3}
                   fill="#020617"
-                  fontSize="12"
+                  fontSize={LABEL_FONT_SIZE}
                   fontFamily="monospace"
-                  fontWeight="700"
                   textAnchor="middle"
                 >
                   {(latest.price * 100).toFixed(1)}
@@ -300,18 +332,18 @@ export default function PolymarketPriceChart({
               <>
                 <text
                   x={PAD.left}
-                  y={VIEWBOX_HEIGHT - 10}
+                  y={box.height - 6}
                   fill="var(--muted)"
-                  fontSize="12"
+                  fontSize={LABEL_FONT_SIZE}
                   fontFamily="monospace"
                 >
                   {formatTime(first.time)}
                 </text>
                 <text
-                  x={VIEWBOX_WIDTH - PAD.right}
-                  y={VIEWBOX_HEIGHT - 10}
+                  x={box.width - PAD.right}
+                  y={box.height - 6}
                   fill="var(--muted)"
-                  fontSize="12"
+                  fontSize={LABEL_FONT_SIZE}
                   fontFamily="monospace"
                   textAnchor="end"
                 >
@@ -320,7 +352,7 @@ export default function PolymarketPriceChart({
               </>
             )}
           </svg>
-        )}
+        ) : null}
       </div>
     </div>
   );
