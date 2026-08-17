@@ -37,65 +37,108 @@ function getSignatureType(flow: WalletFlow) {
   return SignatureTypeV2.POLY_PROXY;
 }
 
+function credsStorageKey(flow: WalletFlow, proxyAddress: string) {
+  return `poly_creds_v2_${flow}_${proxyAddress.toLowerCase()}`;
+}
+
+function buildClient(
+  signer: ethers.Signer,
+  proxyAddress: string,
+  flow: WalletFlow,
+  creds?: ApiKeyCreds,
+) {
+  return new ClobClient({
+    host: HOST,
+    chain: CHAIN,
+    signer: signer as unknown as ClobClientOptions["signer"],
+    ...(creds ? { creds } : {}),
+    signatureType: getSignatureType(flow),
+    funderAddress: proxyAddress.toLowerCase(),
+    retryOnError: true,
+    throwOnError: true,
+  });
+}
+
+/**
+ * True when API credentials for this wallet are already cached.
+ *
+ * Needs no signer, so callers can tell "trading was enabled before, the client is
+ * just a tick behind" from "trading was never enabled" — the two look identical
+ * through `restorePolymarketClient`, which returns null for both.
+ */
+export function hasPolymarketCreds(
+  proxyAddress: string,
+  flow: WalletFlow = "proxy",
+) {
+  if (typeof window === "undefined") return false;
+
+  const saved = window.localStorage.getItem(credsStorageKey(flow, proxyAddress));
+  if (!saved) return false;
+
+  try {
+    return isApiKeyCreds(JSON.parse(saved) as unknown);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Rebuilds a signed client from cached API credentials, or null if there are none.
+ *
+ * Synchronous and prompt-free: creating the API key is the part that needs a
+ * signature, and that already happened. This is what lets a page navigation or a
+ * tab switch keep trading enabled instead of sending the user back through
+ * "Enable trading" every time the component remounts.
+ */
+export function restorePolymarketClient(
+  signer: ethers.Signer,
+  proxyAddress: string,
+  flow: WalletFlow = "proxy",
+) {
+  if (typeof window === "undefined") return null;
+
+  const saved = window.localStorage.getItem(credsStorageKey(flow, proxyAddress));
+  if (!saved) return null;
+
+  try {
+    const creds = JSON.parse(saved) as unknown;
+    if (!isApiKeyCreds(creds)) return null;
+
+    return buildClient(signer, proxyAddress, flow, creds);
+  } catch {
+    return null;
+  }
+}
+
 export async function initPolymarketClient(
   signer: ethers.Signer,
   proxyAddress: string,
   flow: WalletFlow = "proxy",
 ) {
   const normalizedProxyAddress = proxyAddress.toLowerCase();
-  const signatureType = getSignatureType(flow);
-  const STORAGE_KEY = `poly_creds_v2_${flow}_${normalizedProxyAddress}`;
+  const STORAGE_KEY = credsStorageKey(flow, proxyAddress);
   const LEGACY_STORAGE_KEY = `poly_creds_${proxyAddress}`;
   const LEGACY_NORMALIZED_STORAGE_KEY = `poly_creds_${normalizedProxyAddress}`;
-  const clobSigner = signer as unknown as ClobClientOptions["signer"];
 
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(LEGACY_STORAGE_KEY);
     window.localStorage.removeItem(LEGACY_NORMALIZED_STORAGE_KEY);
   }
 
-  const savedCreds =
-    typeof window !== "undefined"
-      ? window.localStorage.getItem(STORAGE_KEY)
-      : null;
+  const restored = restorePolymarketClient(signer, proxyAddress, flow);
+  if (restored) return restored;
 
-  if (savedCreds) {
-    try {
-      const creds = JSON.parse(savedCreds) as unknown;
-
-      if (!isApiKeyCreds(creds)) {
-        window.localStorage.removeItem(STORAGE_KEY);
-        throw new Error("Stored Polymarket API credentials are incomplete.");
-      }
-
-      const client = new ClobClient({
-        host: HOST,
-        chain: CHAIN,
-        signer: clobSigner,
-        creds,
-        signatureType,
-        funderAddress: normalizedProxyAddress,
-        retryOnError: true,
-        throwOnError: true,
-      });
-
-      return client;
-    } catch (e) {
-      console.error("key's parsing got error in localStorage", e);
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
+  // Anything left under the key is unusable — drop it so the retry is clean.
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(STORAGE_KEY);
   }
 
   // 1) временный клиент БЕЗ creds — только чтобы получить apiCreds
-  const tempClient = new ClobClient({
-    host: HOST,
-    chain: CHAIN,
-    signer: clobSigner,
-    signatureType,
-    funderAddress: normalizedProxyAddress,
-    retryOnError: true,
-    throwOnError: true,
-  }) as ApiKeyCapableClient;
+  const tempClient = buildClient(
+    signer,
+    proxyAddress,
+    flow,
+  ) as ApiKeyCapableClient;
 
   let apiCreds: ApiKeyCreds;
   try {
@@ -121,16 +164,5 @@ export async function initPolymarketClient(
   }
 
   // 2) полноценный клиент с creds
-  const client = new ClobClient({
-    host: HOST,
-    chain: CHAIN,
-    signer: clobSigner,
-    creds: apiCreds,
-    signatureType,
-    funderAddress: normalizedProxyAddress,
-    retryOnError: true,
-    throwOnError: true,
-  });
-
-  return client;
+  return buildClient(signer, proxyAddress, flow, apiCreds);
 }

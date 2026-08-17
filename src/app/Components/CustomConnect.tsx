@@ -5,7 +5,12 @@ import { useAppKitAccount } from "@reown/appkit/react";
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { useAccount, useWalletClient } from "wagmi";
 import { ethers } from "ethers";
-import { USDC_E_ADDRESS, ERC20_ABI } from "../share/main";
+import { getContractConfig } from "@polymarket/clob-client-v2";
+import {
+  CONDITIONAL_TOKENS_ABI,
+  USDC_E_ADDRESS,
+  ERC20_ABI,
+} from "../share/main";
 import {
   type DepositWalletCall,
   RelayClient,
@@ -25,6 +30,44 @@ const WITHDRAW_TOKENS = [
   { symbol: "pUSD", address: PUSD_ADDRESS },
   { symbol: "USDC.e", address: USDC_E_ADDRESS },
 ];
+
+/**
+ * Re-approve when the collateral allowance is below this.
+ *
+ * Approvals are set to the maximum, so a reading this low means one was never
+ * granted (or was revoked) rather than that it has been spent down.
+ */
+const MIN_COLLATERAL_ALLOWANCE = ethers.utils.parseUnits("1000000", 6);
+
+/**
+ * How long a relayer batch signature stays valid.
+ *
+ * The relayer rejects short windows with `deadline too soon` — four minutes was
+ * not enough. Replay protection comes from the wallet nonce inside the signed
+ * payload, not from this window, so a generous value costs nothing: the batch
+ * executes exactly once either way.
+ */
+const BATCH_DEADLINE_SECONDS = 3600;
+
+/**
+ * A batch deadline anchored to chain time instead of the browser clock.
+ *
+ * The deadline is checked against `block.timestamp`, so a machine running a few
+ * minutes behind would sign one the relayer reads as already expired — the same
+ * `deadline too soon` rejection, but for a reason no larger window would fix.
+ */
+async function batchDeadline(provider: ethers.providers.Provider) {
+  let now = Math.floor(Date.now() / 1000);
+
+  try {
+    const block = await provider.getBlock("latest");
+    if (block?.timestamp) now = block.timestamp;
+  } catch (e) {
+    console.warn("[relayer] chain time unavailable, using local clock:", e);
+  }
+
+  return (now + BATCH_DEADLINE_SECONDS).toString();
+}
 
 export async function checkContractDeployed(
   signer: ethers.Signer,
@@ -76,6 +119,175 @@ function createDepositWalletRelayClient(signer: ethers.providers.JsonRpcSigner) 
   );
 }
 
+/**
+ * Pulls the relayer's own message out of the JSON blob its client throws.
+ *
+ * `HttpClient` stringifies the entire axios response into `Error.message`, so the
+ * one useful phrase — `deadline too soon` — arrives buried in headers and request
+ * config. Falls back to the raw text when the shape is unfamiliar.
+ */
+function relayerErrorMessage(e: unknown) {
+  const raw = e instanceof Error ? e.message : String(e);
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      data?: { error?: unknown };
+      error?: unknown;
+    };
+    const detail = parsed.data?.error ?? parsed.error;
+
+    if (typeof detail === "string" && detail.length > 0) return detail;
+  } catch {
+    // Not the relayer's JSON envelope; the raw text is the best available.
+  }
+
+  return raw;
+}
+
+/**
+ * Runs a batch of calls *as* the trading wallet, via the relayer.
+ *
+ * The trading wallet is a contract wallet with no gas of its own, so anything it
+ * needs to do on-chain — moving tokens out, approving the exchange — is submitted
+ * here and paid for by the relayer. Hitting the builder-signer endpoint requires
+ * a session, so one is established first.
+ */
+async function runDepositWalletBatch(
+  signer: ethers.providers.JsonRpcSigner,
+  tradingWalletAddress: string,
+  calls: DepositWalletCall[],
+  failureMessage: string,
+) {
+  const provider = signer.provider;
+  if (!provider) throw new Error("No provider on signer");
+
+  await ensureSiweSession(signer, await signer.getAddress());
+
+  const relayClient = createDepositWalletRelayClient(signer);
+  let response;
+
+  try {
+    response = await relayClient.executeDepositWalletBatch(
+      calls,
+      tradingWalletAddress,
+      await batchDeadline(provider)
+    );
+  } catch (e) {
+    throw new Error(`${failureMessage} Relayer: ${relayerErrorMessage(e)}`);
+  }
+
+  const result = await relayClient.pollUntilState(
+    response.transactionID,
+    [
+      RelayerTransactionState.STATE_MINED,
+      RelayerTransactionState.STATE_CONFIRMED,
+      RelayerTransactionState.STATE_EXECUTED,
+      RelayerTransactionState.STATE_FAILED,
+    ],
+    RelayerTransactionState.STATE_FAILED,
+    60,
+    3000
+  );
+
+  if (!result || result.state === RelayerTransactionState.STATE_FAILED) {
+    throw new Error(failureMessage);
+  }
+
+  return result.transactionHash ?? response.transactionHash ?? response.hash;
+}
+
+/**
+ * Approves the Polymarket exchange to move the trading wallet's funds.
+ *
+ * This is *not* what `ClobClient.updateBalanceAllowance` does — that only asks the
+ * CLOB to re-read the chain. The approval itself has to be sent by the trading
+ * wallet, so it goes through the relayer. Without it every order is rejected with
+ * `the allowance is not enough -> allowance: 0`, which is the error the exchange
+ * returns after the order has already been signed.
+ *
+ * Reads the current state first and returns false when nothing was missing, so
+ * this is cheap enough to call before an order as well as during setup.
+ */
+export async function ensureExchangeApprovals(
+  signer: ethers.providers.JsonRpcSigner,
+  tradingWalletAddress: string
+) {
+  const provider = signer.provider;
+  if (!provider) throw new Error("No provider on signer");
+
+  const code = await provider.getCode(tradingWalletAddress);
+  if (code === "0x") {
+    throw new Error(
+      "Trading wallet is not deployed on Polygon yet. Create it before approving."
+    );
+  }
+
+  const contracts = getContractConfig(POLYGON_CHAIN_ID);
+  // The deposit-wallet flow settles on the V2 exchanges; `exchangeV2` is the
+  // spender the CLOB names when it rejects an order for a missing allowance.
+  const spenders = [contracts.exchangeV2, contracts.negRiskExchangeV2];
+
+  const collateral = new ethers.Contract(
+    contracts.collateral,
+    ERC20_ABI,
+    provider
+  );
+  const conditional = new ethers.Contract(
+    contracts.conditionalTokens,
+    CONDITIONAL_TOKENS_ABI,
+    provider
+  );
+
+  const calls: DepositWalletCall[] = [];
+
+  for (const spender of spenders) {
+    // Collateral for buying, outcome shares for selling. Both are needed: a
+    // wallet that can only buy cannot get out of a position.
+    const allowance: ethers.BigNumber = await collateral.allowance(
+      tradingWalletAddress,
+      spender
+    );
+
+    if (allowance.lt(MIN_COLLATERAL_ALLOWANCE)) {
+      calls.push({
+        target: contracts.collateral,
+        value: "0",
+        data: collateral.interface.encodeFunctionData("approve", [
+          spender,
+          ethers.constants.MaxUint256,
+        ]),
+      });
+    }
+
+    const approvedForAll: boolean = await conditional.isApprovedForAll(
+      tradingWalletAddress,
+      spender
+    );
+
+    if (!approvedForAll) {
+      calls.push({
+        target: contracts.conditionalTokens,
+        value: "0",
+        data: conditional.interface.encodeFunctionData("setApprovalForAll", [
+          spender,
+          true,
+        ]),
+      });
+    }
+  }
+
+  if (calls.length === 0) return false;
+
+  await runDepositWalletBatch(
+    signer,
+    tradingWalletAddress,
+    calls,
+    "Exchange approval failed. Trading stays disabled until it succeeds."
+  );
+
+  return true;
+}
+
 export async function withdrawAllStablecoinsFromTradingWallet(
   signer: ethers.providers.JsonRpcSigner,
   tradingWalletAddress: string,
@@ -123,34 +335,12 @@ export async function withdrawAllStablecoinsFromTradingWallet(
     throw new Error("Trading wallet does not have pUSD or USDC.e");
   }
 
-  // Executing the withdraw batch hits the builder-signer endpoint, which now
-  // requires a session — establish it before the relayer call.
-  await ensureSiweSession(signer, await signer.getAddress());
-
-  const relayClient = createDepositWalletRelayClient(signer);
-  const response = await relayClient.executeDepositWalletBatch(
-    calls,
+  return runDepositWalletBatch(
+    signer,
     tradingWalletAddress,
-    Math.floor(Date.now() / 1000 + 240).toString()
+    calls,
+    "Trading wallet withdraw failed"
   );
-  const result = await relayClient.pollUntilState(
-    response.transactionID,
-    [
-      RelayerTransactionState.STATE_MINED,
-      RelayerTransactionState.STATE_CONFIRMED,
-      RelayerTransactionState.STATE_EXECUTED,
-      RelayerTransactionState.STATE_FAILED,
-    ],
-    RelayerTransactionState.STATE_FAILED,
-    60,
-    3000
-  );
-
-  if (!result || result.state === RelayerTransactionState.STATE_FAILED) {
-    throw new Error("Trading wallet withdraw failed");
-  }
-
-  return result.transactionHash ?? response.transactionHash ?? response.hash;
 }
 
 export async function ensureDepositWalletWithRelayer(

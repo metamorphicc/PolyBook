@@ -222,7 +222,9 @@ export function TerminalOnboarding({
     {
       title: "Enable trading",
       done: canTrade,
-      hint: "Creates your API key and token approvals",
+      // The approval is an on-chain transaction through the relayer, so this step
+      // can sit for half a minute. Say so, or it reads as a hung button.
+      hint: "Signs your API key, then approves the exchange on-chain (~30s)",
       action: () => account.activate(),
       label: "Enable",
     },

@@ -456,7 +456,9 @@ export default function ScalpTerminal() {
           </div>
         )}
 
-        {showOnboarding && !account.ready && (
+        {/* Held back while the trading wallet is still being looked up — otherwise
+            this flashes over the dock on every mount for users who are set up. */}
+        {showOnboarding && !account.ready && !account.hydrating && (
           <TerminalOnboarding
             account={account}
             onDismiss={() => setShowOnboarding(false)}

@@ -14,10 +14,15 @@ import {
 } from "@polymarket/clob-client-v2";
 import {
   ensureDepositWalletWithRelayer,
+  ensureExchangeApprovals,
   saveDepositWalletAddress,
   useEthersSigner,
 } from "../CustomConnect";
-import { initPolymarketClient } from "../verifyUser";
+import {
+  hasPolymarketCreds,
+  initPolymarketClient,
+  restorePolymarketClient,
+} from "../verifyUser";
 import type { TradingSettings } from "../tradingSettings";
 import type { LiveFill, LiveOrder, LivePosition, OrderDraft } from "./types";
 
@@ -29,6 +34,12 @@ export type TradingAccount = {
   depositWallet: string | null;
   /** True once a signed CLOB client exists and orders can be sent. */
   ready: boolean;
+  /**
+   * True while the trading wallet is still being looked up. Callers should hold
+   * back any "you are not set up" UI until this clears, or it flashes at users
+   * who are in fact set up.
+   */
+  hydrating: boolean;
   activating: boolean;
   activationError: string | null;
   balanceUsd: number | null;
@@ -104,6 +115,20 @@ function parseCollateral(value: string | undefined) {
 }
 
 /**
+ * The exchange's rejection when the trading wallet has not approved it.
+ *
+ * Matched on text because the CLOB returns it as a message, not a code. Kept
+ * narrow on purpose: the same response also mentions balance, and treating a
+ * genuinely underfunded wallet as un-approved would send it through a pointless
+ * on-chain approval instead of telling the user to add funds.
+ */
+function isMissingAllowanceError(e: unknown) {
+  const message = e instanceof Error ? e.message : String(e);
+
+  return /the allowance is not enough/i.test(message);
+}
+
+/**
  * Everything the dock needs to actually trade: the signed CLOB client, live open
  * orders / positions / fills, collateral balance, and the order actions.
  *
@@ -117,7 +142,8 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
   const { switchChainAsync } = useSwitchChain();
 
   const [depositWallet, setDepositWallet] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const [walletHydrated, setWalletHydrated] = useState(false);
+  const [activatedClient, setActivatedClient] = useState<ClobClient | null>(null);
   const [activating, setActivating] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
   const [balanceUsd, setBalanceUsd] = useState<number | null>(null);
@@ -128,54 +154,82 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
   const [refreshToken, setRefreshToken] = useState(0);
   const [activeMarket, setActiveMarket] = useState("");
 
-  const clientRef = useRef<ClobClient | null>(null);
-  const clientOwnerRef = useRef<string | null>(null);
   const activationRef = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(() => setRefreshToken((token) => token + 1), []);
 
-  // Drop everything on disconnect *and* on account switch. A client built for the
-  // previous account would keep signing against that account's deposit wallet, so
-  // this is a correctness guard, not just cleanup.
-  useEffect(() => {
-    const owner = isConnected && address ? address.toLowerCase() : null;
-    const staleClient =
-      clientOwnerRef.current !== null && clientOwnerRef.current !== owner;
+  const owner = isConnected && address ? address.toLowerCase() : null;
 
-    if (owner && !staleClient) return;
-
-    clientRef.current = null;
-    clientOwnerRef.current = null;
+  // Reset on disconnect and on account switch. A client built for the previous
+  // account would keep signing against that account's trading wallet, so this is
+  // a correctness guard, not just cleanup — and it runs during render so no
+  // committed frame ever shows one account's balances as another's.
+  const [activeOwner, setActiveOwner] = useState(owner);
+  if (activeOwner !== owner) {
+    setActiveOwner(owner);
+    setActivatedClient(null);
     setDepositWallet(null);
-    setReady(false);
+    setWalletHydrated(false);
     setBalanceUsd(null);
     setAllowanceUsd(null);
     setPositions([]);
     setOrders([]);
     setFills([]);
     setActivationError(null);
-  }, [address, isConnected]);
+  }
 
-  // Pick up the persisted deposit wallet so positions and balances show before
-  // the user activates trading. Refetched when SessionSync lands the cookie.
+  // Rebuild the signed client from cached API credentials. This is the whole
+  // reason navigating away and back does not send the user through "Enable
+  // trading" again: the credentials outlive the component, so readiness should
+  // too. Derived during render rather than in an effect because it only reads
+  // localStorage — no prompt, no network call, nothing to wait for.
+  const restoredClient = useMemo(() => {
+    if (!signer || !owner || !depositWallet) return null;
+
+    return restorePolymarketClient(signer, depositWallet, "deposit-wallet");
+  }, [depositWallet, owner, signer]);
+
+  const client = activatedClient ?? restoredClient;
+  const ready = client !== null && depositWallet !== null;
+
+  // Two different waits, and conflating them breaks one case or the other:
+  // the wallet lookup is in flight, or the wallet is known and was set up before
+  // but the signer wagmi needs for the restore is a tick behind. A known wallet
+  // with no cached credentials is *not* a wait — that user has to activate, so
+  // the onboarding should appear immediately.
+  const credentialed =
+    depositWallet !== null && hasPolymarketCreds(depositWallet, "deposit-wallet");
+  const hydrating =
+    owner !== null && (!walletHydrated || (credentialed && client === null));
+
+  // Pick up the persisted trading wallet so positions and balances show before
+  // the user activates trading. Refetched when SessionSync lands the cookie,
+  // since the first attempt on a cold connect happens before the session exists.
   useEffect(() => {
-    if (!isConnected || !address) return;
+    if (!owner) return;
 
     let cancelled = false;
 
     const loadWallet = async () => {
       try {
-        const res = await fetch(`/api/user/trading-wallet?address=${address}`, {
+        const res = await fetch(`/api/user/trading-wallet?address=${owner}`, {
           cache: "no-store",
         });
-        if (!res.ok) return;
 
-        const data = (await res.json()) as { depositWalletAddress?: string | null };
-        if (!cancelled && data.depositWalletAddress) {
-          setDepositWallet(data.depositWalletAddress);
+        if (res.ok) {
+          const data = (await res.json()) as {
+            depositWalletAddress?: string | null;
+          };
+          if (!cancelled && data.depositWalletAddress) {
+            setDepositWallet(data.depositWalletAddress.toLowerCase());
+          }
         }
       } catch (e) {
         console.warn("[useTradingAccount] failed to load deposit wallet:", e);
+      } finally {
+        // Marked hydrated even on failure, otherwise a user who never signed in
+        // would never be offered the onboarding that fixes it.
+        if (!cancelled) setWalletHydrated(true);
       }
     };
 
@@ -186,7 +240,7 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
       cancelled = true;
       window.removeEventListener("polybook:trading-wallet-updated", loadWallet);
     };
-  }, [address, isConnected]);
+  }, [owner]);
 
   const activate = useCallback(async () => {
     if (!signer || !address) {
@@ -207,36 +261,35 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
         }
 
         const walletAddress = await ensureDepositWalletWithRelayer(signer);
-        setDepositWallet(walletAddress);
+        setDepositWallet(walletAddress.toLowerCase());
 
         await saveDepositWalletAddress(signer, address, walletAddress).catch((e) =>
           console.warn("[useTradingAccount] deposit wallet not persisted:", e),
         );
 
-        const client = await initPolymarketClient(
+        const nextClient = await initPolymarketClient(
           signer,
           walletAddress,
           "deposit-wallet",
         );
-        clientRef.current = client;
-        clientOwnerRef.current = address.toLowerCase();
 
-        // Without a collateral allowance the exchange rejects orders with an
-        // opaque balance error, so set it up front rather than on first trade.
-        try {
-          await client.updateBalanceAllowance({
-            asset_type: AssetType.COLLATERAL,
-          });
-        } catch (e) {
-          console.warn("[useTradingAccount] collateral allowance update failed:", e);
-        }
+        // The on-chain approval, and the reason this step is not optional: the
+        // exchange rejects every order with `allowance: 0` until the trading
+        // wallet has approved it. Failing here must fail activation — swallowing
+        // it is what made the error surface later as an unexplained rejection.
+        await ensureExchangeApprovals(signer, walletAddress);
 
-        setReady(true);
+        // Now that the chain state has changed, have the CLOB re-read it.
+        await nextClient
+          .updateBalanceAllowance({ asset_type: AssetType.COLLATERAL })
+          .catch((e) =>
+            console.warn("[useTradingAccount] balance refresh failed:", e),
+          );
+
+        setActivatedClient(nextClient);
         window.dispatchEvent(new Event("polybook:trading-wallet-updated"));
       } catch (e: unknown) {
-        setReady(false);
-        clientRef.current = null;
-        clientOwnerRef.current = null;
+        setActivatedClient(null);
         setActivationError(
           e instanceof Error ? e.message : "Failed to enable trading",
         );
@@ -252,13 +305,12 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
   }, [address, chainId, signer, switchChainAsync]);
 
   const requireClient = useCallback(() => {
-    const client = clientRef.current;
     if (!client || !depositWallet) {
       throw new Error("Enable trading first.");
     }
 
     return { client, walletAddress: depositWallet };
-  }, [depositWallet]);
+  }, [client, depositWallet]);
 
   // Positions come from the public data API and only need the wallet address, so
   // they poll as soon as it is known — before trading is activated.
@@ -293,14 +345,11 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
 
   // Open orders, fills and collateral need the authed client.
   useEffect(() => {
-    if (!ready) return;
+    if (!client) return;
 
     let cancelled = false;
 
     const loadAccount = async () => {
-      const client = clientRef.current;
-      if (!client) return;
-
       const marketParams = activeMarket ? { market: activeMarket } : undefined;
 
       try {
@@ -363,7 +412,29 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [ready, activeMarket, refreshToken]);
+  }, [client, activeMarket, refreshToken]);
+
+  /**
+   * Grants the missing on-chain approvals, then has the CLOB re-read them.
+   *
+   * Checked before an order and not only at activation: an approval can be
+   * missing on a wallet set up before this code existed, or revoked afterwards.
+   * The failure mode is the exchange rejecting an already-signed order with
+   * `allowance: 0`, which reads to the user as an unexplained balance error.
+   */
+  const repairApprovals = useCallback(
+    async (
+      client: ClobClient,
+      walletAddress: string,
+      params: Parameters<ClobClient["updateBalanceAllowance"]>[0],
+    ) => {
+      if (!signer) throw new Error("Connect your wallet first.");
+
+      await ensureExchangeApprovals(signer, walletAddress);
+      await client.updateBalanceAllowance(params);
+    },
+    [signer],
+  );
 
   const placeOrder = useCallback(
     async (draft: OrderDraft, size: number) => {
@@ -390,12 +461,12 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
         }
 
         if (allowanceUsd !== null && allowanceUsd < size) {
-          await client.updateBalanceAllowance({
+          await repairApprovals(client, walletAddress, {
             asset_type: AssetType.COLLATERAL,
           });
         }
       } else {
-        // Selling moves conditional tokens, which needs its own allowance.
+        // Selling moves conditional tokens, which needs its own approval.
         try {
           const conditional = await client.getBalanceAllowance({
             asset_type: AssetType.CONDITIONAL,
@@ -411,37 +482,71 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
           }
 
           if (approvedShares !== null && approvedShares < shares) {
-            await client.updateBalanceAllowance({
+            await repairApprovals(client, walletAddress, {
               asset_type: AssetType.CONDITIONAL,
               token_id: draft.tokenId,
             });
           }
         } catch (e) {
           // A failed allowance lookup should not block the order, but a real
-          // shortfall check above must still propagate.
-          if (e instanceof Error && e.message.startsWith("Not enough shares")) {
+          // shortfall and a failed approval must still propagate — without the
+          // approval the order cannot fill at all.
+          if (
+            e instanceof Error &&
+            (e.message.startsWith("Not enough shares") ||
+              e.message.startsWith("Exchange approval failed"))
+          ) {
             throw e;
           }
           console.warn("[useTradingAccount] conditional allowance check failed:", e);
         }
       }
 
-      const order = await client.createOrder(
-        {
-          tokenID: draft.tokenId,
-          price,
-          side: draft.side === "BUY" ? Side.BUY : Side.SELL,
-          size: shares,
-        },
-        { tickSize: draft.tickSize },
-      );
+      const submit = async () => {
+        const order = await client.createOrder(
+          {
+            tokenID: draft.tokenId,
+            price,
+            side: draft.side === "BUY" ? Side.BUY : Side.SELL,
+            size: shares,
+          },
+          { tickSize: draft.tickSize },
+        );
 
-      assertSignedByDepositWallet(order, walletAddress);
+        assertSignedByDepositWallet(order, walletAddress);
 
-      await client.postOrder(order, OrderType.GTC, settings.postOnly, false);
+        await client.postOrder(order, OrderType.GTC, settings.postOnly, false);
+      };
+
+      try {
+        await submit();
+      } catch (e) {
+        // The checks above run off polled state, so they miss an approval that
+        // went missing since the last poll — or that was never granted, on a
+        // wallet created before approvals were part of activation. Repair once
+        // and resubmit rather than handing the user the raw rejection.
+        if (!isMissingAllowanceError(e)) throw e;
+
+        await repairApprovals(
+          client,
+          walletAddress,
+          draft.side === "BUY"
+            ? { asset_type: AssetType.COLLATERAL }
+            : { asset_type: AssetType.CONDITIONAL, token_id: draft.tokenId },
+        );
+        await submit();
+      }
+
       refresh();
     },
-    [allowanceUsd, balanceUsd, refresh, requireClient, settings.postOnly],
+    [
+      allowanceUsd,
+      balanceUsd,
+      refresh,
+      repairApprovals,
+      requireClient,
+      settings.postOnly,
+    ],
   );
 
   const closePosition = useCallback(
@@ -456,14 +561,12 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
       // so the tick size usually has to be looked up rather than passed in.
       const resolvedTickSize = tickSize ?? (await client.getTickSize(tokenId));
 
-      try {
-        await client.updateBalanceAllowance({
-          asset_type: AssetType.CONDITIONAL,
-          token_id: tokenId,
-        });
-      } catch (e) {
-        console.warn("[useTradingAccount] conditional allowance update failed:", e);
-      }
+      // Exiting must not be blocked by a missing approval, so this is not
+      // wrapped in a catch the way the pre-order check is.
+      await repairApprovals(client, walletAddress, {
+        asset_type: AssetType.CONDITIONAL,
+        token_id: tokenId,
+      });
 
       // FAK, not FOK: a fast market's book is thin, and FOK would reject the whole
       // exit if it cannot fill at once. FAK takes what liquidity exists and drops
@@ -483,7 +586,7 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
       await client.postOrder(order, OrderType.FAK, false, false);
       refresh();
     },
-    [refresh, requireClient],
+    [refresh, repairApprovals, requireClient],
   );
 
   const cancelOrder = useCallback(
@@ -514,6 +617,7 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
     () => ({
       depositWallet,
       ready,
+      hydrating,
       activating,
       activationError,
       balanceUsd,
@@ -540,6 +644,7 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
       closePosition,
       depositWallet,
       fills,
+      hydrating,
       orders,
       placeOrder,
       positions,
