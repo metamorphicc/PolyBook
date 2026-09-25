@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { RowDataPacket } from "mysql2";
-import { pool } from "../../db";
+import { getPool } from "../../db";
 import { isAddress, readSession } from "@/app/lib/auth/session";
 
 interface TradingWalletRow extends RowDataPacket {
@@ -8,6 +8,7 @@ interface TradingWalletRow extends RowDataPacket {
 }
 
 async function getDepositWalletAddress(ownerAddress: string) {
+  const pool = getPool();
   const [rows] = await pool.query<TradingWalletRow[]>(
     "SELECT deposit_wallet_address FROM users WHERE address = ?",
     [ownerAddress],
@@ -20,6 +21,7 @@ async function upsertDepositWalletAddress(
   ownerAddress: string,
   depositWalletAddress: string,
 ) {
+  const pool = getPool();
   await pool.query(
     `
     INSERT INTO users (address, deposit_wallet_address)

@@ -33,6 +33,8 @@ type ChartMode = "poly" | "price";
 
 /** Seconds before expiry at which the countdown starts warning. */
 const EXPIRY_WARNING_SECONDS = 30;
+const LIVE_TRADING_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_LIVE_TRADING === "true";
 
 const SHORTCUTS: Array<[string, string]> = [
   ["1 – 4", "Switch asset (BTC / ETH / SOL / XRP)"],
@@ -64,7 +66,7 @@ export default function ScalpTerminal() {
   );
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(LIVE_TRADING_ENABLED);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -125,6 +127,10 @@ export default function ScalpTerminal() {
   );
 
   const activate = useCallback(() => {
+    if (!LIVE_TRADING_ENABLED) {
+      setActionError("Order submission is disabled in the public portfolio demo.");
+      return;
+    }
     setShowOnboarding(true);
     void account.activate();
   }, [account]);
@@ -377,6 +383,7 @@ export default function ScalpTerminal() {
             position={position}
             ticket={ticket}
             ready={account.ready}
+            readOnly={!LIVE_TRADING_ENABLED}
             onActivate={activate}
           />
         </div>

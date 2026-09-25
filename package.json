@@ -39,7 +39,7 @@
     "lightweight-charts": "^4.2.3",
     "lit": "3.3.0",
     "mysql2": "^3.20.0",
-    "next": "^16.2.4",
+    "next": "^16.3.3",
     "nodemon": "^3.1.11",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
@@ -60,7 +60,7 @@
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "^16.3.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

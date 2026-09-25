@@ -76,7 +76,7 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #000000; 
+    background: var(--foreground);
   }
 }
 
@@ -93,6 +93,11 @@ svg[height=""] {
 
 svg[width=""] {
   width: 1em;
+}
+
+html,
+body {
+  overflow-x: clip;
 }
 
 body {
@@ -135,4 +140,10 @@ body {
 
 :root[data-theme="dark"] .theme-center-icon {
   filter: invert(1) brightness(1.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow-bounce {
+    animation: none;
+  }
 }

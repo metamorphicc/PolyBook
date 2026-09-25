@@ -1,11 +1,12 @@
 import crypto from "crypto";
-import { pool } from "../db";
+import { getPool } from "../db";
 import { NextResponse } from "next/server";
 import { isAddress } from "@/app/lib/auth/session";
 import { NONCE_TTL_SECONDS } from "@/app/lib/auth/nonce";
 
 export async function POST(req: Request) {
   try {
+    const pool = getPool();
     const { address } = await req.json();
     if (!isAddress(address)) {
       return NextResponse.json({ error: "Invalid address" }, { status: 400 });
