@@ -1,8 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
+import { getAppMode, isTradingMode } from "./lib/appMode";
 import styles from "./portfolio.module.css";
 
 export default function Main() {
+  const mode = getAppMode();
+  const trading = isTradingMode(mode);
+
   return (
     <main className={styles.page}>
       <nav className={styles.commandNav} aria-label="Primary navigation">
@@ -19,8 +23,16 @@ export default function Main() {
 
       <section className={styles.hero}>
         <div className={styles.heroCopy}>
-          <p className={styles.kicker}>Portfolio build · public demo</p>
-          <h1>Read the fast market before you touch the orderbook.</h1>
+          <p className={styles.kicker}>
+            {trading
+              ? "Trading workspace · authenticated execution"
+              : "Product portfolio · market research"}
+          </p>
+          <h1>
+            {trading
+              ? "Move from market signal to guarded execution."
+              : "Read the fast market before you touch the orderbook."}
+          </h1>
           <p className={styles.lede}>
             PolyBook brings Polymarket quotes, crypto reference data, staged order
             controls, and account state into one keyboard-first workspace.
@@ -29,7 +41,10 @@ export default function Main() {
         <dl className={styles.scope} aria-label="Product scope">
           <div><dt>Markets</dt><dd>BTC · ETH · SOL · XRP</dd></div>
           <div><dt>Windows</dt><dd>5m · 15m · 1h</dd></div>
-          <div><dt>Public mode</dt><dd>Read-only by default</dd></div>
+          <div>
+            <dt>Mode</dt>
+            <dd>{trading ? "Wallet-backed trading" : "Read-only portfolio"}</dd>
+          </div>
         </dl>
       </section>
 
@@ -56,20 +71,36 @@ export default function Main() {
       <section id="architecture" className={styles.architecture} aria-labelledby="architecture-title">
         <div className={styles.sectionHead}>
           <p>02 / Boundaries</p>
-          <h2 id="architecture-title">The public build is useful without custody.</h2>
+          <h2 id="architecture-title">
+            {trading
+              ? "Execution stays behind explicit account and risk checks."
+              : "Market research stays useful without wallet access."}
+          </h2>
         </div>
         <ol className={styles.flow}>
           <li><span>01</span><strong>Resolve</strong><p>Find the active fast-market window and its outcome tokens.</p></li>
           <li><span>02</span><strong>Observe</strong><p>Read public CLOB books, price history, and reference crypto data.</p></li>
           <li><span>03</span><strong>Guard</strong><p>Validate spread, size, liquidity, network, and wallet readiness.</p></li>
-          <li><span>04</span><strong>Submit</strong><p>Available only in an explicitly configured private deployment.</p></li>
+          <li>
+            <span>04</span>
+            <strong>{trading ? "Submit" : "Review"}</strong>
+            <p>
+              {trading
+                ? "Send an order only after wallet, session, balance, and allowance checks pass."
+                : "Inspect the full decision workspace without connecting a wallet or sending an order."}
+            </p>
+          </li>
         </ol>
       </section>
 
       <aside className={styles.stickyCta}>
         <div>
           <strong>Explore the terminal</strong>
-          <span>Live public market data. Order submission disabled in demo mode.</span>
+          <span>
+            {trading
+              ? "Authenticated account data and guarded order execution."
+              : "Live public market data. No wallet access or order submission."}
+          </span>
         </div>
         <Link href="/terminal">Open workspace →</Link>
       </aside>

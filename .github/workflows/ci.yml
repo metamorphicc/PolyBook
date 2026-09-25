@@ -19,6 +19,6 @@ jobs:
       - run: npm run lint
       - run: npm run build
         env:
-          NEXT_PUBLIC_ENABLE_LIVE_TRADING: "false"
+          NEXT_PUBLIC_APP_MODE: portfolio
           NEXT_PUBLIC_APP_URL: http://localhost:3002
       - run: npm run smoke

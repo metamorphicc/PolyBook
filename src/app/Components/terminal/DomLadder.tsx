@@ -416,7 +416,7 @@ function OrderTicketPanel({
           onClick={onActivate}
           className="w-full border border-[var(--accent)] bg-[var(--accent)]/10 px-3 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:bg-[var(--accent)]/20 disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-transparent disabled:theme-muted"
         >
-          {readOnly ? "Read-only portfolio demo" : "Enable trading"}
+          {readOnly ? "Portfolio mode · read only" : "Enable trading"}
         </button>
       </div>
     );

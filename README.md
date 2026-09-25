@@ -2,7 +2,7 @@
 
 PolyBook is a keyboard-first workspace for Polymarket fast crypto markets. It keeps the active market, probability history, reference crypto prices, orderbook depth, staged order controls, and account state on one screen.
 
-The public build runs in read-only mode. It reads public market data but does not connect a wallet or submit orders. The private execution path must be enabled explicitly and requires separate database, session, wallet, and builder credentials.
+The portfolio build runs in read-only mode. It reads public market data but does not connect a wallet or submit orders. The trading build must be enabled explicitly and requires separate database, session, wallet, and builder credentials.
 
 ![PolyBook terminal with BTC market rail, probability chart, and orderbook](public/terminal-preview.png)
 
@@ -16,9 +16,9 @@ The public build runs in read-only mode. It reads public market data but does no
 - Supports keyboard market switching and order shortcuts.
 - Checks order size, spread, liquidity, network, wallet, balance, and allowance before submission.
 
-## Public demo boundary
+## Portfolio boundary
 
-`NEXT_PUBLIC_ENABLE_LIVE_TRADING` defaults to `false`. In that mode:
+`NEXT_PUBLIC_APP_MODE` defaults to `portfolio`. In that mode:
 
 - public prices, charts, and books remain available;
 - wallet controls are hidden;
@@ -82,9 +82,9 @@ PolyBook deployment and returns Vercel's 404 page.
 
 Start from [`.env.example`](.env.example).
 
-| Variable | Public demo | Private execution | Purpose |
+| Variable | Portfolio | Trading | Purpose |
 | --- | --- | --- | --- |
-| `NEXT_PUBLIC_ENABLE_LIVE_TRADING` | `false` | `true` | Exposes wallet and execution controls |
+| `NEXT_PUBLIC_APP_MODE` | `portfolio` | `trading` | Selects the product surface and execution boundary |
 | `NEXT_PUBLIC_APP_URL` | optional | required | Canonical deployment URL and wallet metadata |
 | `NEXT_PUBLIC_REOWN_PROJECT_ID` | optional | required | Public Reown project identifier |
 | `DB_*` | unused | required | MySQL session and wallet persistence |
@@ -109,4 +109,4 @@ db/migrations/                           MySQL schema history
 
 ## Current scope
 
-The public portfolio deployment is a market-data and interface demo. The repository still contains the private execution path for local development, but no claim is made that a public deployment can place orders safely without its full infrastructure and operational controls.
+The public portfolio deployment is a market-data and interface showcase. The repository also contains the trading path, but no claim is made that a deployment can place orders safely without its full infrastructure and operational controls.
