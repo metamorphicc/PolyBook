@@ -16,6 +16,7 @@ export function ThemeToggle() {
     >
       <span className="relative h-6 w-6 rounded-full bg-[var(--surface)] transition">
         <span
+          suppressHydrationWarning
           className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full transition-all duration-300 ${
             isLight
               ? "left-1 bg-amber-400 shadow-[0_0_18px_rgba(251,191,36,0.8)]"
@@ -23,6 +24,7 @@ export function ThemeToggle() {
           }`}
         />
         <span
+          suppressHydrationWarning
           className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[var(--surface-muted)] transition-opacity duration-300 ${
             isLight ? "opacity-0" : "opacity-100"
           }`}

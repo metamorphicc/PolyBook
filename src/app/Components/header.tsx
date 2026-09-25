@@ -18,6 +18,8 @@ type PriceView = {
 };
 
 const ASSETS: Asset[] = ["BTC", "ETH", "SOL", "XRP"];
+const LIVE_TRADING_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_LIVE_TRADING === "true";
 
 /**
  * The four fast-market assets, always in the same order.
@@ -204,14 +206,14 @@ export default function Header({ compact = false }: { compact?: boolean }) {
         <nav className="ml-auto hidden items-center gap-1 md:flex">
           <button
             type="button"
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/terminal")}
             className={`theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] ${
               compact ? "px-2 py-1 text-xs" : "px-3 py-2 text-sm"
             }`}
           >
             Terminal
           </button>
-          <button
+          {LIVE_TRADING_ENABLED ? <button
             type="button"
             disabled={!tradingWallet}
             onClick={handleDeposit}
@@ -220,8 +222,8 @@ export default function Header({ compact = false }: { compact?: boolean }) {
             }`}
           >
             Deposit
-          </button>
-          <button
+          </button> : null}
+          {LIVE_TRADING_ENABLED ? <button
             type="button"
             onClick={() => router.push("/profile")}
             className={`theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] ${
@@ -229,14 +231,20 @@ export default function Header({ compact = false }: { compact?: boolean }) {
             }`}
           >
             Profile
-          </button>
+          </button> : null}
         </nav>
 
         <ThemeToggle />
 
-        <div className="min-w-0 shrink-0">
-          <CustomConnect onTradingWalletAddress={setTradingWallet} />
-        </div>
+        {LIVE_TRADING_ENABLED ? (
+          <div className="min-w-0 shrink-0">
+            <CustomConnect onTradingWalletAddress={setTradingWallet} />
+          </div>
+        ) : (
+          <span className="shrink-0 border border-sky-400/50 px-2 py-1 font-mono text-[10px] text-sky-300">
+            PUBLIC DEMO · READ ONLY
+          </span>
+        )}
       </div>
     </header>
   );
