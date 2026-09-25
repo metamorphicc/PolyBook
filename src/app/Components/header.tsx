@@ -3,11 +3,9 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useAppKitAccount } from "@reown/appkit/react";
-import { DepositContent } from "./DepositContent";
-import { useModal } from "./Modal";
-import CustomConnect from "./CustomConnect";
+import { getAppMode, isTradingMode } from "../lib/appMode";
 import { ThemeToggle } from "./ThemeToggle";
+import { TradingHeaderActions } from "./TradingHeaderActions";
 
 type Asset = "BTC" | "ETH" | "SOL" | "XRP";
 
@@ -18,9 +16,6 @@ type PriceView = {
 };
 
 const ASSETS: Asset[] = ["BTC", "ETH", "SOL", "XRP"];
-const LIVE_TRADING_ENABLED =
-  process.env.NEXT_PUBLIC_ENABLE_LIVE_TRADING === "true";
-
 /**
  * The four fast-market assets, always in the same order.
  *
@@ -120,56 +115,7 @@ function MarketPrices({ compact = false }: { compact?: boolean }) {
 /** `compact` trims the chrome for the terminal dock, which budgets its height. */
 export default function Header({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
-  const { openModal, closeModal } = useModal();
-  const { address, isConnected } = useAppKitAccount();
-  const [tradingWallet, setTradingWallet] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isConnected || !address) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTradingWallet(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    const initAccount = async () => {
-      try {
-        const tradingRes = await fetch(
-          `/api/user/trading-wallet?address=${address}`,
-        );
-        if (!tradingRes.ok) return;
-        const tradingData = await tradingRes.json();
-        if (!cancelled) {
-          setTradingWallet(
-            (tradingData.depositWalletAddress as string | null) ?? null,
-          );
-        }
-      } catch {
-        if (!cancelled) setTradingWallet(null);
-      }
-    };
-
-    initAccount();
-    // The session cookie is established asynchronously after connect (SessionSync),
-    // and the deposit address is persisted after wallet derivation. Refetch when
-    // either lands so the deposit modal shows the right address without a reload.
-    window.addEventListener("polybook:trading-wallet-updated", initAccount);
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener("polybook:trading-wallet-updated", initAccount);
-    };
-  }, [address, isConnected]);
-
-  const handleDeposit = () => {
-    openModal(
-      <DepositContent
-        address={tradingWallet ?? ""}
-        closeModal={closeModal}
-      />,
-    );
-  };
+  const trading = isTradingMode(getAppMode());
 
   return (
     <header className="w-full shrink-0 border-b theme-border theme-surface">
@@ -213,17 +159,7 @@ export default function Header({ compact = false }: { compact?: boolean }) {
           >
             Terminal
           </button>
-          {LIVE_TRADING_ENABLED ? <button
-            type="button"
-            disabled={!tradingWallet}
-            onClick={handleDeposit}
-            className={`theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent ${
-              compact ? "px-2 py-1 text-xs" : "px-3 py-2 text-sm"
-            }`}
-          >
-            Deposit
-          </button> : null}
-          {LIVE_TRADING_ENABLED ? <button
+          {trading ? <button
             type="button"
             onClick={() => router.push("/profile")}
             className={`theme-muted transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] ${
@@ -236,13 +172,11 @@ export default function Header({ compact = false }: { compact?: boolean }) {
 
         <ThemeToggle />
 
-        {LIVE_TRADING_ENABLED ? (
-          <div className="min-w-0 shrink-0">
-            <CustomConnect onTradingWalletAddress={setTradingWallet} />
-          </div>
+        {trading ? (
+          <TradingHeaderActions compact={compact} />
         ) : (
           <span className="shrink-0 border border-sky-400/50 px-2 py-1 font-mono text-[10px] text-sky-300">
-            PUBLIC DEMO · READ ONLY
+            PORTFOLIO · READ ONLY
           </span>
         )}
       </div>

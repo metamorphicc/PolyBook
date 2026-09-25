@@ -27,14 +27,14 @@ import {
 import { useFastMarket } from "@/app/Components/terminal/useFastMarket";
 import { useOrderTicket } from "@/app/Components/terminal/useOrderTicket";
 import { useTradingAccount } from "@/app/Components/terminal/useTradingAccount";
+import { getAppMode, isTradingMode } from "@/app/lib/appMode";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ChartMode = "poly" | "price";
 
 /** Seconds before expiry at which the countdown starts warning. */
 const EXPIRY_WARNING_SECONDS = 30;
-const LIVE_TRADING_ENABLED =
-  process.env.NEXT_PUBLIC_ENABLE_LIVE_TRADING === "true";
+const LIVE_TRADING_ENABLED = isTradingMode(getAppMode());
 
 const SHORTCUTS: Array<[string, string]> = [
   ["1 – 4", "Switch asset (BTC / ETH / SOL / XRP)"],
@@ -128,7 +128,7 @@ export default function ScalpTerminal() {
 
   const activate = useCallback(() => {
     if (!LIVE_TRADING_ENABLED) {
-      setActionError("Order submission is disabled in the public portfolio demo.");
+      setActionError("Order submission is not available in portfolio mode.");
       return;
     }
     setShowOnboarding(true);
