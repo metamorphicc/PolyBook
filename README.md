@@ -63,7 +63,20 @@ Useful checks:
 ```bash
 npm run lint
 npm run build
+npm run smoke
 ```
+
+## Deployment
+
+The public portfolio deployment is hosted at
+[poly-book.vercel.app](https://poly-book.vercel.app). Both `/` and `/terminal`
+are checked after a production build by `npm run smoke`.
+
+Vercel detects the Next.js application automatically. Set the portfolio
+environment variables from `.env.example`, use `https://poly-book.vercel.app`
+for `NEXT_PUBLIC_APP_URL`, and leave the live-trading switch disabled. A
+similarly named address with three consecutive `o` characters is not the
+PolyBook deployment and returns Vercel's 404 page.
 
 ## Configuration
 
