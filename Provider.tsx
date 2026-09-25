@@ -10,16 +10,13 @@ import {
 } from "@reown/appkit/networks";
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { DefaultSIWX } from "@reown/appkit-siwx";
+import { getTradingPublicConfig } from "./src/app/lib/appMode";
 
 const queryClient = new QueryClient();
 
 const networks: [AppKitNetwork, ...AppKitNetwork[]] = [mainnet, polygon];
 
-const projectId =
-  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ??
-  "d86a9102e9f88948ac5d809a1a6e9cad";
-
-const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3002";
+const { appUrl, reownProjectId: projectId } = getTradingPublicConfig();
 
 const metadata = {
   name: "Polybook",
@@ -47,7 +44,7 @@ createAppKit({
   siwx,
 });
 
-export function AppKitProviderr({ children }: { children: React.ReactNode }) {
+export function TradingProviders({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiAdapter.wagmiConfig}>
       <QueryClientProvider client={queryClient}>

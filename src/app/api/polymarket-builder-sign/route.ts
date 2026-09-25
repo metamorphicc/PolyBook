@@ -4,10 +4,14 @@ import {
 } from "@polymarket/builder-signing-sdk";
 import { serverEnv } from "@/app/lib/env";
 import { readSession } from "@/app/lib/auth/session";
+import { rejectOutsideTradingMode } from "@/app/lib/tradingGuard";
 
 const MAX_BODY_LENGTH = 50000;
 
 export async function POST(request: NextRequest) {
+  const unavailable = rejectOutsideTradingMode();
+  if (unavailable) return unavailable;
+
   try {
     // This route hands back the app's builder credentials (API key + passphrase)
     // and a valid signature for the requested path. Only signed-in wallets may

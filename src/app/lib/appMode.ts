@@ -15,3 +15,36 @@ export function getAppMode(): AppMode {
 export function isTradingMode(mode = getAppMode()) {
   return mode === "trading";
 }
+
+function requirePublicEnv(name: string, value: string | undefined) {
+  if (!value) {
+    throw new Error(`Missing required environment variable in trading mode: ${name}`);
+  }
+
+  return value;
+}
+
+export function getTradingPublicConfig() {
+  if (!isTradingMode()) {
+    throw new Error("Wallet configuration is unavailable in portfolio mode.");
+  }
+
+  const appUrl = requirePublicEnv(
+    "NEXT_PUBLIC_APP_URL",
+    process.env.NEXT_PUBLIC_APP_URL,
+  );
+
+  try {
+    new URL(appUrl);
+  } catch {
+    throw new Error("NEXT_PUBLIC_APP_URL must be an absolute URL in trading mode.");
+  }
+
+  return {
+    appUrl,
+    reownProjectId: requirePublicEnv(
+      "NEXT_PUBLIC_REOWN_PROJECT_ID",
+      process.env.NEXT_PUBLIC_REOWN_PROJECT_ID,
+    ),
+  };
+}

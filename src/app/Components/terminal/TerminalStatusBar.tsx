@@ -25,6 +25,7 @@ export function TerminalStatusBar({
   connected,
   stale,
   ready,
+  tradingEnabled,
   onOpenSettings,
   onToggleHelp,
 }: {
@@ -39,6 +40,7 @@ export function TerminalStatusBar({
   connected: boolean;
   stale: boolean;
   ready: boolean;
+  tradingEnabled: boolean;
   onOpenSettings: () => void;
   onToggleHelp: () => void;
 }) {
@@ -71,46 +73,56 @@ export function TerminalStatusBar({
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <Field label="Orders" value={String(openOrderCount)} />
-        <Field
-          label="PnL"
-          value={formatSignedUsd(openPnl)}
-          tone={
-            openPnl > 0
-              ? "text-green-300"
-              : openPnl < 0
-                ? "text-red-300"
-                : undefined
-          }
-        />
-        <Field
-          label="pUSD"
-          value={balanceUsd === null ? "--" : formatUsd(balanceUsd)}
-          tone={
-            balanceUsd !== null && balanceUsd <= 0 ? "text-amber-300" : undefined
-          }
-        />
+        {tradingEnabled ? (
+          <>
+            <Field label="Orders" value={String(openOrderCount)} />
+            <Field
+              label="PnL"
+              value={formatSignedUsd(openPnl)}
+              tone={
+                openPnl > 0
+                  ? "text-green-300"
+                  : openPnl < 0
+                    ? "text-red-300"
+                    : undefined
+              }
+            />
+            <Field
+              label="pUSD"
+              value={balanceUsd === null ? "--" : formatUsd(balanceUsd)}
+              tone={
+                balanceUsd !== null && balanceUsd <= 0
+                  ? "text-amber-300"
+                  : undefined
+              }
+            />
 
-        <span
-          title={
-            !connected
-              ? "Wallet not connected"
-              : !ready
-                ? "Trading not enabled"
-                : stale
-                  ? "Book feed stale"
-                  : "Live"
-          }
-          className={`h-2 w-2 rounded-full ${
-            !connected
-              ? "bg-zinc-500"
-              : !ready
-                ? "bg-amber-400"
-                : stale
-                  ? "bg-amber-400"
-                  : "bg-green-400"
-          }`}
-        />
+            <span
+              title={
+                !connected
+                  ? "Wallet not connected"
+                  : !ready
+                    ? "Trading not enabled"
+                    : stale
+                      ? "Book feed stale"
+                      : "Live"
+              }
+              className={`h-2 w-2 rounded-full ${
+                !connected
+                  ? "bg-zinc-500"
+                  : !ready
+                    ? "bg-amber-400"
+                    : stale
+                      ? "bg-amber-400"
+                      : "bg-green-400"
+              }`}
+            />
+          </>
+        ) : (
+          <span className="border theme-border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide theme-muted">
+            Public market data
+          </span>
+        )}
 
         <button
           type="button"
@@ -120,14 +132,16 @@ export function TerminalStatusBar({
         >
           ?
         </button>
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          title="Trading settings"
-          className="border theme-border px-1.5 py-0.5 text-[10px] theme-muted transition hover:border-[var(--accent)] hover:text-[var(--foreground)]"
-        >
-          ⚙
-        </button>
+        {tradingEnabled && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            title="Trading settings"
+            className="border theme-border px-1.5 py-0.5 text-[10px] theme-muted transition hover:border-[var(--accent)] hover:text-[var(--foreground)]"
+          >
+            ⚙
+          </button>
+        )}
       </div>
     </div>
   );
