@@ -1,3 +1,5 @@
+import "server-only";
+
 function readEnv(name: string, fallback?: string) {
   const value = process.env[name] ?? fallback;
   if (!value) {
@@ -8,7 +10,7 @@ function readEnv(name: string, fallback?: string) {
 }
 
 export function serverEnv() {
-  return {
+  const env = {
     db: {
       host: readEnv("DB_HOST", process.env.MYSQLHOST),
       port: Number(readEnv("DB_PORT", process.env.MYSQLPORT ?? "3306")),
@@ -26,4 +28,10 @@ export function serverEnv() {
       ),
     },
   };
+
+  if (!Number.isInteger(env.db.port) || env.db.port <= 0) {
+    throw new Error("DB_PORT must be a positive integer");
+  }
+
+  return env;
 }

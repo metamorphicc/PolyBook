@@ -1,11 +1,15 @@
 "use client";
 
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { getAppMode, isTradingMode } from "../lib/appMode";
 import { ThemeToggle } from "./ThemeToggle";
-import { TradingHeaderActions } from "./TradingHeaderActions";
+
+const TradingHeaderActions = dynamic(() =>
+  import("./TradingHeaderActions").then((module) => module.TradingHeaderActions),
+);
 
 type Asset = "BTC" | "ETH" | "SOL" | "XRP";
 

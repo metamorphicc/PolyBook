@@ -25,10 +25,18 @@ import {
 } from "../verifyUser";
 import type { TradingSettings } from "../tradingSettings";
 import type { LiveFill, LiveOrder, LivePosition, OrderDraft } from "./types";
+import { getAppMode, isTradingMode } from "@/app/lib/appMode";
 
 const POLYGON_CHAIN_ID = 137;
 const ACCOUNT_POLL_MS = 3000;
 const COLLATERAL_DECIMALS = 6;
+const TRADING_MODE = isTradingMode(getAppMode());
+
+function assertTradingMode() {
+  if (!TRADING_MODE) {
+    throw new Error("Trading actions are unavailable in portfolio mode.");
+  }
+}
 
 export type TradingAccount = {
   depositWallet: string | null;
@@ -243,6 +251,8 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
   }, [owner]);
 
   const activate = useCallback(async () => {
+    assertTradingMode();
+
     if (!signer || !address) {
       throw new Error("Connect your wallet first.");
     }
@@ -305,6 +315,8 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
   }, [address, chainId, signer, switchChainAsync]);
 
   const requireClient = useCallback(() => {
+    assertTradingMode();
+
     if (!client || !depositWallet) {
       throw new Error("Enable trading first.");
     }

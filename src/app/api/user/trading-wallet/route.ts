@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { RowDataPacket } from "mysql2";
 import { getPool } from "../../db";
 import { isAddress, readSession } from "@/app/lib/auth/session";
+import { rejectOutsideTradingMode } from "@/app/lib/tradingGuard";
 
 interface TradingWalletRow extends RowDataPacket {
   deposit_wallet_address: string | null;
@@ -33,6 +34,9 @@ async function upsertDepositWalletAddress(
 }
 
 export async function GET(request: Request) {
+  const unavailable = rejectOutsideTradingMode();
+  if (unavailable) return unavailable;
+
   try {
     const session = await readSession();
     if (!session) {
@@ -59,6 +63,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const unavailable = rejectOutsideTradingMode();
+  if (unavailable) return unavailable;
+
   try {
     const session = await readSession();
     if (!session) {

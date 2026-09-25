@@ -3,8 +3,12 @@ import { getPool } from "../db";
 import { NextResponse } from "next/server";
 import { isAddress } from "@/app/lib/auth/session";
 import { NONCE_TTL_SECONDS } from "@/app/lib/auth/nonce";
+import { rejectOutsideTradingMode } from "@/app/lib/tradingGuard";
 
 export async function POST(req: Request) {
+  const unavailable = rejectOutsideTradingMode();
+  if (unavailable) return unavailable;
+
   try {
     const pool = getPool();
     const { address } = await req.json();

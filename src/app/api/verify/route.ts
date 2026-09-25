@@ -4,8 +4,12 @@ import { ethers } from "ethers";
 import { isAddress, setSessionCookie, signSession } from "@/app/lib/auth/session";
 import { NONCE_TTL_SECONDS } from "@/app/lib/auth/nonce";
 import type { RowDataPacket } from "mysql2";
+import { rejectOutsideTradingMode } from "@/app/lib/tradingGuard";
 
 export async function POST(req: Request) {
+  const unavailable = rejectOutsideTradingMode();
+  if (unavailable) return unavailable;
+
   try {
     const pool = getPool();
     const { address, nonce, signature } = await req.json();
