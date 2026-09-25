@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { pool } from "../db";
+import { getPool } from "../db";
 import { ethers } from "ethers";
 import { isAddress, setSessionCookie, signSession } from "@/app/lib/auth/session";
 import { NONCE_TTL_SECONDS } from "@/app/lib/auth/nonce";
@@ -7,6 +7,7 @@ import type { RowDataPacket } from "mysql2";
 
 export async function POST(req: Request) {
   try {
+    const pool = getPool();
     const { address, nonce, signature } = await req.json();
     if (!isAddress(address) || typeof nonce !== "string" || typeof signature !== "string") {
       return NextResponse.json(

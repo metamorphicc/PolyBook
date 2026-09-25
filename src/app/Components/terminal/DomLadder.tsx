@@ -63,6 +63,7 @@ export function DomLadder({
   position,
   ticket,
   ready,
+  readOnly,
   onActivate,
 }: {
   market: FastMarketState;
@@ -73,6 +74,7 @@ export function DomLadder({
   position: LivePosition | null;
   ticket: OrderTicket;
   ready: boolean;
+  readOnly: boolean;
   onActivate: () => void;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
@@ -180,6 +182,7 @@ export function DomLadder({
       : null;
 
   const stageOrder = (price: number, shiftKey: boolean) => {
+    if (readOnly) return;
     if (!market.tokenId) return;
 
     if (!ready) {
@@ -321,6 +324,7 @@ export function DomLadder({
         position={position}
         ticket={ticket}
         ready={ready}
+        readOnly={readOnly}
         onActivate={onActivate}
       />
     </div>
@@ -387,6 +391,7 @@ function OrderTicketPanel({
   position,
   ticket,
   ready,
+  readOnly,
   onActivate,
 }: {
   market: FastMarketState;
@@ -394,6 +399,7 @@ function OrderTicketPanel({
   position: LivePosition | null;
   ticket: OrderTicket;
   ready: boolean;
+  readOnly: boolean;
   onActivate: () => void;
 }) {
   const { draft } = ticket;
@@ -406,10 +412,11 @@ function OrderTicketPanel({
       <div className="shrink-0 border-t theme-border bg-[var(--surface-muted)] p-2">
         <button
           type="button"
+          disabled={readOnly}
           onClick={onActivate}
-          className="w-full border border-[var(--accent)] bg-[var(--accent)]/10 px-3 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:bg-[var(--accent)]/20"
+          className="w-full border border-[var(--accent)] bg-[var(--accent)]/10 px-3 py-2 text-[11px] font-semibold text-[var(--foreground)] transition hover:bg-[var(--accent)]/20 disabled:cursor-not-allowed disabled:border-[var(--border)] disabled:bg-transparent disabled:theme-muted"
         >
-          Enable trading
+          {readOnly ? "Read-only portfolio demo" : "Enable trading"}
         </button>
       </div>
     );

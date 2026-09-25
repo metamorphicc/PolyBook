@@ -15,13 +15,17 @@ const queryClient = new QueryClient();
 
 const networks: [AppKitNetwork, ...AppKitNetwork[]] = [mainnet, polygon];
 
-const projectId = "d86a9102e9f88948ac5d809a1a6e9cad";
+const projectId =
+  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ??
+  "d86a9102e9f88948ac5d809a1a6e9cad";
+
+const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3002";
 
 const metadata = {
   name: "Polybook",
-  description: "Polybook dApp",
-  url: "http://localhost:3002",
-  icons: ["http://localhost:3002/icon.png"],
+  description: "Fast-market research and execution workspace",
+  url: appUrl,
+  icons: [`${appUrl}/logo_blue.jpg`],
 };
 
 export const wagmiAdapter = new WagmiAdapter({
