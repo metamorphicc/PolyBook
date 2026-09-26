@@ -73,6 +73,11 @@ The public portfolio deployment is hosted at
 [poly-book.vercel.app](https://poly-book.vercel.app). Both `/` and `/terminal`
 are checked after a production build by `npm run smoke`.
 
+The connected Netlify site is configured in `netlify.toml` as a portfolio-only
+mirror. Keeping its build command and `.next` publish directory in the repository
+prevents the site-level empty-directory configuration that previously served a
+Netlify 404 for every route.
+
 Vercel detects the Next.js application automatically. Set the portfolio
 environment variables from `.env.example`, use `https://poly-book.vercel.app`
 for `NEXT_PUBLIC_APP_URL`, and leave the live-trading switch disabled. A
