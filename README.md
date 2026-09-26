@@ -74,9 +74,9 @@ The public portfolio deployment is hosted at
 are checked after a production build by `npm run smoke`.
 
 The connected Netlify site is configured in `netlify.toml` as a portfolio-only
-mirror. Keeping its build command and `.next` publish directory in the repository
-prevents the site-level empty-directory configuration that previously served a
-Netlify 404 for every route.
+mirror. Its Next.js adapter is declared explicitly so Netlify packages the App
+Router server handler and generated routing rules instead of publishing the raw
+`.next` directory, which serves a Netlify 404 for application routes.
 
 Vercel detects the Next.js application automatically. Set the portfolio
 environment variables from `.env.example`, use `https://poly-book.vercel.app`

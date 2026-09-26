@@ -6,3 +6,6 @@
   NODE_VERSION = "24"
   NEXT_PUBLIC_APP_MODE = "portfolio"
   NEXT_PUBLIC_APP_URL = "https://joyful-melomakarona-c6b30e.netlify.app"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

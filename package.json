@@ -46,6 +46,7 @@
     "wagmi": "^2.19.5"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.16.0",
     "@tailwindcss/postcss": "^4",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
