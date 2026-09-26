@@ -213,10 +213,9 @@ export function useOrderTicket({
       );
 
       try {
-        await account.placeOrder(target, effectiveSize);
-        setStatus(
-          `${target.side} ${target.outcome} sent @ ${(target.price * 100).toFixed(1)}%`,
-        );
+        const result = await account.placeOrder(target, effectiveSize);
+        const reference = result.orderId ?? result.tradeIds[0] ?? "accepted";
+        setStatus(`${result.status} · ${reference}`);
         setDraft(null);
       } catch (e) {
         setStatus(null);
@@ -251,8 +250,13 @@ export function useOrderTicket({
     setStatus(`Closing ${position.size.toFixed(2)} shares at market`);
 
     try {
-      await account.closePosition(position.asset, position.size, market.tickSize);
-      setStatus("Close order sent.");
+      const result = await account.closePosition(
+        position.asset,
+        position.size,
+        market.tickSize,
+      );
+      const reference = result.orderId ?? result.tradeIds[0] ?? "accepted";
+      setStatus(`Close ${result.status} · ${reference}`);
     } catch (e) {
       setStatus(null);
       setError(e instanceof Error ? e.message : "Close failed.");

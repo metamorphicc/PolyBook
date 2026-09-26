@@ -179,11 +179,11 @@ export function TerminalWorkspace({
 
   const closePosition = useCallback(
     (target: LivePosition) =>
-      void runAction(target.asset, () =>
+      void runAction(target.asset, async () => {
         // No tick size passed: a blotter row can belong to a market that is not
         // on screen, so let the account look it up.
-        account.closePosition(target.asset, target.size),
-      ),
+        await account.closePosition(target.asset, target.size);
+      }),
     [account, runAction],
   );
 
