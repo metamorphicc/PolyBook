@@ -44,8 +44,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (method.toUpperCase() !== "POST" || path !== "/submit" || !body) {
+      return NextResponse.json(
+        { error: "Only relayer transaction submission may be signed" },
+        { status: 403 },
+      );
+    }
+
+    let relayerPayload: { from?: unknown };
+    try {
+      relayerPayload = JSON.parse(body) as { from?: unknown };
+    } catch {
+      return NextResponse.json(
+        { error: "body must contain valid JSON" },
+        { status: 400 },
+      );
+    }
+
+    if (
+      typeof relayerPayload.from !== "string" ||
+      relayerPayload.from.toLowerCase() !== session.address
+    ) {
+      return NextResponse.json(
+        { error: "Relayer signer does not match the authenticated wallet" },
+        { status: 403 },
+      );
+    }
+
     const builderCredentials = serverEnv().polyBuilder;
-    const sigTimestamp = Date.now().toString();
+    // Builder timestamps are Unix seconds. Milliseconds produce a valid HMAC
+    // over the wrong timestamp domain and the relayer rejects the request.
+    const sigTimestamp = Math.floor(Date.now() / 1000).toString();
 
     const signature = buildHmacSignature(
       builderCredentials.secret,

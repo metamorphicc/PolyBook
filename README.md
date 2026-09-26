@@ -48,7 +48,8 @@ Public market-data routes do not import or initialize the private database conne
 
 ## Run locally
 
-Requirements: Node.js 20 or newer.
+Requirements: Node.js 24 or newer. The official Polymarket client used by the
+trading build requires Node 24.
 
 ```bash
 npm ci

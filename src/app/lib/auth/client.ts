@@ -7,8 +7,6 @@ import type { ethers } from "ethers";
 // cookie and derive the owner from it, so the client must establish a session
 // once per wallet before those routes will accept reads or writes.
 
-export const SIWE_MESSAGE_PREFIX = "PolyBook login nonce: ";
-
 let inflightLogin: { address: string; promise: Promise<void> } | null = null;
 
 async function fetchSessionAddress(): Promise<string | null> {
@@ -36,15 +34,15 @@ async function runSiweLogin(
   if (!nonceRes.ok) {
     throw new Error("Failed to request login nonce");
   }
-  const { nonce } = (await nonceRes.json()) as { nonce?: string };
-  if (!nonce) throw new Error("Login nonce missing in response");
+  const { message } = (await nonceRes.json()) as { message?: string };
+  if (!message) throw new Error("Login message missing in response");
 
-  const signature = await signer.signMessage(`${SIWE_MESSAGE_PREFIX}${nonce}`);
+  const signature = await signer.signMessage(message);
 
   const verifyRes = await fetch("/api/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address: normalized, nonce, signature }),
+    body: JSON.stringify({ address: normalized, message, signature }),
   });
   if (!verifyRes.ok) {
     const data = await verifyRes.json().catch(() => ({}));

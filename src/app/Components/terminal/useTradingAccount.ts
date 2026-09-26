@@ -11,18 +11,17 @@ import {
   SignatureTypeV2,
   type ClobClient,
   type TickSize,
+  type OrderResponse,
 } from "@polymarket/clob-client-v2";
 import {
-  ensureDepositWalletWithRelayer,
-  ensureExchangeApprovals,
   saveDepositWalletAddress,
   useEthersSigner,
 } from "../CustomConnect";
 import {
-  hasPolymarketCreds,
   initPolymarketClient,
-  restorePolymarketClient,
+  type PolymarketClientSession,
 } from "../verifyUser";
+import { ensureSiweSession } from "../../lib/auth/client";
 import type { TradingSettings } from "../tradingSettings";
 import type { LiveFill, LiveOrder, LivePosition, OrderDraft } from "./types";
 import { getAppMode, isTradingMode } from "@/app/lib/appMode";
@@ -56,17 +55,37 @@ export type TradingAccount = {
   orders: LiveOrder[];
   fills: LiveFill[];
   activate: () => Promise<void>;
-  placeOrder: (draft: OrderDraft, size: number) => Promise<void>;
+  placeOrder: (draft: OrderDraft, size: number) => Promise<OrderSubmission>;
   closePosition: (
     tokenId: string,
     shares: number,
     tickSize?: TickSize,
-  ) => Promise<void>;
+  ) => Promise<OrderSubmission>;
   cancelOrder: (orderId: string) => Promise<void>;
   cancelAllInMarket: (conditionId: string) => Promise<void>;
   refresh: () => void;
   setActiveMarket: (conditionId: string) => void;
 };
+
+export type OrderSubmission = {
+  orderId: string | null;
+  status: string;
+  tradeIds: string[];
+  transactionHashes: string[];
+};
+
+function parseOrderSubmission(response: OrderResponse): OrderSubmission {
+  if (!response.success) {
+    throw new Error(response.errorMsg || "Polymarket rejected the order.");
+  }
+
+  return {
+    orderId: response.orderID || null,
+    status: response.status || "accepted",
+    tradeIds: response.tradeIDs ?? [],
+    transactionHashes: response.transactionsHashes ?? [],
+  };
+}
 
 /**
  * BUY sizes are dollar notionals but the CLOB takes share counts, so a BUY has to
@@ -122,6 +141,16 @@ function parseCollateral(value: string | undefined) {
   }
 }
 
+function parseAllowances(allowances: Record<string, string> | undefined) {
+  const values = Object.values(allowances ?? {})
+    .map(parseCollateral)
+    .filter((value): value is number => value !== null);
+
+  // Orders can route through more than one exchange. Reporting the smallest
+  // approval prevents one fully-approved contract from hiding another at zero.
+  return values.length > 0 ? Math.min(...values) : null;
+}
+
 /**
  * The exchange's rejection when the trading wallet has not approved it.
  *
@@ -151,7 +180,8 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
 
   const [depositWallet, setDepositWallet] = useState<string | null>(null);
   const [walletHydrated, setWalletHydrated] = useState(false);
-  const [activatedClient, setActivatedClient] = useState<ClobClient | null>(null);
+  const [activatedSession, setActivatedSession] =
+    useState<PolymarketClientSession | null>(null);
   const [activating, setActivating] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
   const [balanceUsd, setBalanceUsd] = useState<number | null>(null);
@@ -175,7 +205,7 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
   const [activeOwner, setActiveOwner] = useState(owner);
   if (activeOwner !== owner) {
     setActiveOwner(owner);
-    setActivatedClient(null);
+    setActivatedSession(null);
     setDepositWallet(null);
     setWalletHydrated(false);
     setBalanceUsd(null);
@@ -186,29 +216,12 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
     setActivationError(null);
   }
 
-  // Rebuild the signed client from cached API credentials. This is the whole
-  // reason navigating away and back does not send the user through "Enable
-  // trading" again: the credentials outlive the component, so readiness should
-  // too. Derived during render rather than in an effect because it only reads
-  // localStorage — no prompt, no network call, nothing to wait for.
-  const restoredClient = useMemo(() => {
-    if (!signer || !owner || !depositWallet) return null;
-
-    return restorePolymarketClient(signer, depositWallet, "deposit-wallet");
-  }, [depositWallet, owner, signer]);
-
-  const client = activatedClient ?? restoredClient;
+  // API credentials stay in memory only. A reload requires explicit activation
+  // again instead of leaving a durable order-capable key in localStorage.
+  const client = activatedSession?.client ?? null;
   const ready = client !== null && depositWallet !== null;
 
-  // Two different waits, and conflating them breaks one case or the other:
-  // the wallet lookup is in flight, or the wallet is known and was set up before
-  // but the signer wagmi needs for the restore is a tick behind. A known wallet
-  // with no cached credentials is *not* a wait — that user has to activate, so
-  // the onboarding should appear immediately.
-  const credentialed =
-    depositWallet !== null && hasPolymarketCreds(depositWallet, "deposit-wallet");
-  const hydrating =
-    owner !== null && (!walletHydrated || (credentialed && client === null));
+  const hydrating = owner !== null && !walletHydrated;
 
   // Pick up the persisted trading wallet so positions and balances show before
   // the user activates trading. Refetched when SessionSync lands the cookie,
@@ -270,24 +283,23 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
           await switchChainAsync({ chainId: POLYGON_CHAIN_ID });
         }
 
-        const walletAddress = await ensureDepositWalletWithRelayer(signer);
-        setDepositWallet(walletAddress.toLowerCase());
+        // The remote builder signer is protected by the same SIWE session as
+        // the rest of the private trading API. Establish it before the official
+        // SDK deploys the Deposit Wallet or submits approval transactions.
+        await ensureSiweSession(signer, address);
+
+        const session = await initPolymarketClient(
+          signer,
+          depositWallet ?? undefined,
+          "deposit-wallet",
+        );
+        const walletAddress = session.walletAddress;
+        const nextClient = session.client;
+        setDepositWallet(walletAddress);
 
         await saveDepositWalletAddress(signer, address, walletAddress).catch((e) =>
           console.warn("[useTradingAccount] deposit wallet not persisted:", e),
         );
-
-        const nextClient = await initPolymarketClient(
-          signer,
-          walletAddress,
-          "deposit-wallet",
-        );
-
-        // The on-chain approval, and the reason this step is not optional: the
-        // exchange rejects every order with `allowance: 0` until the trading
-        // wallet has approved it. Failing here must fail activation — swallowing
-        // it is what made the error surface later as an unexplained rejection.
-        await ensureExchangeApprovals(signer, walletAddress);
 
         // Now that the chain state has changed, have the CLOB re-read it.
         await nextClient
@@ -296,10 +308,10 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
             console.warn("[useTradingAccount] balance refresh failed:", e),
           );
 
-        setActivatedClient(nextClient);
+        setActivatedSession(session);
         window.dispatchEvent(new Event("polybook:trading-wallet-updated"));
       } catch (e: unknown) {
-        setActivatedClient(null);
+        setActivatedSession(null);
         setActivationError(
           e instanceof Error ? e.message : "Failed to enable trading",
         );
@@ -312,7 +324,7 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
 
     activationRef.current = run;
     return run;
-  }, [address, chainId, signer, switchChainAsync]);
+  }, [address, chainId, depositWallet, signer, switchChainAsync]);
 
   const requireClient = useCallback(() => {
     assertTradingMode();
@@ -411,7 +423,7 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
         if (cancelled) return;
 
         setBalanceUsd(parseCollateral(collateral?.balance));
-        setAllowanceUsd(parseCollateral(collateral?.allowance));
+        setAllowanceUsd(parseAllowances(collateral?.allowances));
       } catch (e) {
         console.warn("[useTradingAccount] balance poll failed:", e);
       }
@@ -442,10 +454,18 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
     ) => {
       if (!signer) throw new Error("Connect your wallet first.");
 
-      await ensureExchangeApprovals(signer, walletAddress);
+      await ensureSiweSession(signer, await signer.getAddress());
+      if (
+        !activatedSession ||
+        activatedSession.walletAddress.toLowerCase() !==
+          walletAddress.toLowerCase()
+      ) {
+        throw new Error("Enable trading again before repairing approvals.");
+      }
+      await activatedSession.ensureTradingApprovals();
       await client.updateBalanceAllowance(params);
     },
-    [signer],
+    [activatedSession, signer],
   );
 
   const placeOrder = useCallback(
@@ -485,7 +505,7 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
             token_id: draft.tokenId,
           });
           const heldShares = parseCollateral(conditional?.balance);
-          const approvedShares = parseCollateral(conditional?.allowance);
+          const approvedShares = parseAllowances(conditional?.allowances);
 
           if (heldShares !== null && shares > heldShares + 1e-6) {
             throw new Error(
@@ -527,11 +547,12 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
 
         assertSignedByDepositWallet(order, walletAddress);
 
-        await client.postOrder(order, OrderType.GTC, settings.postOnly, false);
+        return client.postOrder(order, OrderType.GTC, settings.postOnly, false);
       };
 
+      let response: OrderResponse;
       try {
-        await submit();
+        response = await submit();
       } catch (e) {
         // The checks above run off polled state, so they miss an approval that
         // went missing since the last poll — or that was never granted, on a
@@ -546,10 +567,11 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
             ? { asset_type: AssetType.COLLATERAL }
             : { asset_type: AssetType.CONDITIONAL, token_id: draft.tokenId },
         );
-        await submit();
+        response = await submit();
       }
 
       refresh();
+      return parseOrderSubmission(response);
     },
     [
       allowanceUsd,
@@ -595,8 +617,9 @@ export function useTradingAccount(settings: TradingSettings): TradingAccount {
 
       assertSignedByDepositWallet(order, walletAddress);
 
-      await client.postOrder(order, OrderType.FAK, false, false);
+      const response = await client.postOrder(order, OrderType.FAK, false, false);
       refresh();
+      return parseOrderSubmission(response);
     },
     [refresh, repairApprovals, requireClient],
   );

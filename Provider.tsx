@@ -9,7 +9,6 @@ import {
   type AppKitNetwork,
 } from "@reown/appkit/networks";
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
-import { DefaultSIWX } from "@reown/appkit-siwx";
 import { getTradingPublicConfig } from "./src/app/lib/appMode";
 
 const queryClient = new QueryClient();
@@ -31,8 +30,6 @@ export const wagmiAdapter = new WagmiAdapter({
   ssr: true,
 });
 
-const siwx = new DefaultSIWX();
-
 createAppKit({
   adapters: [wagmiAdapter],
   networks,
@@ -41,7 +38,6 @@ createAppKit({
   features: {
     analytics: true,
   },
-  siwx,
 });
 
 export function TradingProviders({ children }: { children: React.ReactNode }) {

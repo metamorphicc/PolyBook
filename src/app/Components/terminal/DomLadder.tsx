@@ -493,7 +493,9 @@ function OrderTicketPanel({
         </div>
       )}
       {!ticket.error && ticket.status && (
-        <div className="truncate text-[10px] theme-muted">{ticket.status}</div>
+        <div title={ticket.status} className="truncate text-[10px] theme-muted">
+          {ticket.status}
+        </div>
       )}
       {market.stale && (
         <div className="text-[10px] text-amber-300">Book stale — reconnecting</div>
