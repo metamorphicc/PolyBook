@@ -94,6 +94,10 @@ Start from [`.env.example`](.env.example).
 
 Builder secrets and passphrases belong on the server. Do not expose them through `NEXT_PUBLIC_*` variables or commit them to Git.
 
+Detailed setup for the two Vercel projects is in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). The real-wallet test and promotion
+gate is [`docs/TRADING_RELEASE_CHECKLIST.md`](docs/TRADING_RELEASE_CHECKLIST.md).
+
 ## Main code paths
 
 ```text

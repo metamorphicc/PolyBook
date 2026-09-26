@@ -9,6 +9,24 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [portfolio, trading]
+    env:
+      NEXT_PUBLIC_APP_MODE: ${{ matrix.mode }}
+      NEXT_PUBLIC_APP_URL: http://localhost:3002
+      NEXT_PUBLIC_REOWN_PROJECT_ID: ci-project-id
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: ci
+      DB_PASSWORD: ci
+      DB_DATABASE: polybook
+      JWT_SECRET: ci-only-secret-not-used-outside-the-build
+      POLY_BUILDER_API_KEY: ci-key
+      POLY_BUILDER_SECRET: ci-secret
+      POLY_BUILDER_PASSPHRASE: ci-passphrase
+      SMOKE_EXPECT_MODE: ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,7 +36,4 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
-        env:
-          NEXT_PUBLIC_APP_MODE: portfolio
-          NEXT_PUBLIC_APP_URL: http://localhost:3002
       - run: npm run smoke
