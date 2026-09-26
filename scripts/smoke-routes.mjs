@@ -107,6 +107,65 @@ try {
       }
       console.log(`ok 404 ${response.url}`);
     }
+  } else if (expectedMode === "trading") {
+    const guardedChecks = [
+      ["/profile", 200],
+      ["/api/session", 200],
+      ["/api/user/trading-wallet", 401],
+    ];
+
+    for (const [route, expectedStatus] of guardedChecks) {
+      const response = await fetch(`${baseUrl}${route}`, { redirect: "manual" });
+      if (response.status !== expectedStatus) {
+        throw new Error(
+          `${response.url} returned ${response.status}; expected ${expectedStatus}`,
+        );
+      }
+      console.log(`ok ${expectedStatus} ${response.url}`);
+    }
+
+    const builderResponse = await fetch(
+      `${baseUrl}/api/polymarket-builder-sign`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        redirect: "manual",
+      },
+    );
+    if (builderResponse.status !== 401) {
+      throw new Error(
+        `${builderResponse.url} returned ${builderResponse.status}; expected 401`,
+      );
+    }
+    console.log(`ok 401 ${builderResponse.url}`);
+  } else {
+    throw new Error(
+      `Unknown SMOKE_EXPECT_MODE ${expectedMode}; expected portfolio or trading`,
+    );
+  }
+
+  if (process.env.SMOKE_CHECK_MARKET_DATA === "1") {
+    const marketResponse = await fetch(`${baseUrl}/api/pol/rail`, {
+      cache: "no-store",
+    });
+    if (!marketResponse.ok) {
+      throw new Error(
+        `${marketResponse.url} returned ${marketResponse.status}`,
+      );
+    }
+
+    const marketData = await marketResponse.json();
+    if (
+      !marketData ||
+      !Array.isArray(marketData.markets) ||
+      marketData.markets.length === 0
+    ) {
+      throw new Error(`${marketResponse.url} returned no active markets`);
+    }
+    console.log(
+      `ok ${marketResponse.status} ${marketResponse.url} (${marketData.markets.length} markets)`,
+    );
   }
 } finally {
   if (server && !server.killed) server.kill();
