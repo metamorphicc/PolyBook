@@ -74,9 +74,17 @@ The preflight reports variable names only and never prints secret values.
 wallet metadata and in the EIP-4361 login message; a preview URL and a production
 URL therefore need separate environment values and separate builds.
 
-Apply every SQL file in `db/migrations` in numeric order before testing. Use a
-database user limited to this database. Builder secrets must only exist as
-server-side variables and must never use a `NEXT_PUBLIC_` prefix.
+Apply the schema before testing:
+
+```powershell
+npm run db:migrate:plan
+npm run db:migrate
+```
+
+Use a database user limited to this database. The migration runner applies SQL
+in numeric order, records checksums, and prevents concurrent runs. Builder
+secrets must only exist as server-side variables and must never use a
+`NEXT_PUBLIC_` prefix.
 
 After deployment:
 
