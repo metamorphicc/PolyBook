@@ -14,6 +14,9 @@ credentials used by trading.
 - Install command: `npm ci`
 - Node.js: 24
 
+`npm run build` runs the deployment preflight before Next.js. Portfolio mode
+does not require trading credentials.
+
 Environment:
 
 ```text
@@ -61,6 +64,11 @@ POLY_BUILDER_API_KEY=<builder-key>
 POLY_BUILDER_SECRET=<builder-secret>
 POLY_BUILDER_PASSPHRASE=<builder-passphrase>
 ```
+
+`npm run build` refuses a trading build when any required value is missing. It
+also requires an origin-only `NEXT_PUBLIC_APP_URL`, HTTPS outside local
+development, a valid database port, and a `JWT_SECRET` of at least 32 bytes.
+The preflight reports variable names only and never prints secret values.
 
 `NEXT_PUBLIC_APP_URL` must exactly match the visible origin. It is embedded in
 wallet metadata and in the EIP-4361 login message; a preview URL and a production
